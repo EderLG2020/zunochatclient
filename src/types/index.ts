@@ -1,4 +1,4 @@
-// Enums — espejo exacto de los enums del backend
+// Enums
 export type MessageType = "TEXT" | "PAYLOAD" | "FILE" | "IMAGE";
 export type MessageStatus = "SENT" | "DELIVERED" | "READ";
 export type PayloadType = "SALES" | "SYSTEM" | "SURVEY" | "CARD";
@@ -87,7 +87,7 @@ export interface Page<T> {
   first: boolean;
 }
 
-// WebSocket events
+// WebSocket — entrante (cliente → servidor)
 export interface WsInboundMessage {
   conversationId: number;
   type: MessageType;
@@ -96,14 +96,36 @@ export interface WsInboundMessage {
   payloadType?: PayloadType;
   fileUrls?: string[];
 }
-export interface TypingEvent {
+
+// WebSocket — WsOutboundMessage (backend → /topic/conversation.{id})
+export interface WsOutboundMessage {
+  eventType: string; // "MESSAGE_RECEIVED"
+  messageId: number;
   conversationId: number;
   senderId: number;
+  senderUsername: string;
+  receiverId: number;
+  type: MessageType;
+  textContent: string | null;
+  payload: unknown | null;
+  payloadType: PayloadType | null;
+  fileUrls: string[];
+  status: MessageStatus;
+  sentAt: string;
+}
+
+// WebSocket — eventos de control (shapes exactos del backend)
+export interface TypingEvent {
+  conversationId: number;
+  userId: number; // ← backend envía "userId", NO "senderId"
+  username: string;
   typing: boolean;
 }
 export interface ReadReceiptEvent {
   conversationId: number;
-  readerId: number;
+  readByUserId: number; // ← backend envía "readByUserId"
+  readByUsername: string;
+  readAt: string;
 }
 export interface PresenceEvent {
   userId: number;

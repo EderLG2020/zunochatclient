@@ -1,15 +1,11 @@
 import { create } from "zustand";
-import type { ConversationResponse, MessageResponse } from "@/types";
+import type { ConversationResponse, MessageResponse, MessageStatus } from "@/types";
 
-// Usuario seleccionado desde búsqueda antes de que exista conversación
-export interface PendingUser {
-  id: number;
-  username: string;
-}
+export interface PendingUser { id: number; username: string; }
 
 interface ChatState {
   activeConversation: ConversationResponse | null;
-  pendingUser:        PendingUser | null;          // chat abierto sin conversación aún
+  pendingUser:        PendingUser | null;
   messages:           MessageResponse[];
   typingUserId:       number | null;
 
@@ -18,6 +14,7 @@ interface ChatState {
   setMessages:           (msgs: MessageResponse[]) => void;
   prependMessages:       (msgs: MessageResponse[]) => void;
   appendMessage:         (msg: MessageResponse) => void;
+  markMessagesAsRead:    (conversationId: number, readByUserId: number) => void;
   setTypingUserId:       (id: number | null) => void;
 }
 
@@ -46,6 +43,27 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const prev = get().messages;
     if (prev.some((m) => m.messageId === msg.messageId)) return;
     set({ messages: [...prev, msg] });
+  },
+
+  // Cuando el receptor abre el chat y marca como leído,
+  // actualiza en el store todos los mensajes que le enviamos a él
+  markMessagesAsRead: (conversationId: number, readByUserId: number) => {
+    const prev = get().messages;
+    const hasChanges = prev.some(
+      (m) => m.conversationId === conversationId &&
+             m.receiverId === readByUserId &&
+             m.status !== "READ"
+    );
+    if (!hasChanges) return; // evita re-render innecesario
+    set({
+      messages: prev.map((m): MessageResponse =>
+        m.conversationId === conversationId &&
+        m.receiverId === readByUserId &&
+        m.status !== "READ"
+          ? { ...m, status: "READ" as MessageStatus }
+          : m
+      ),
+    });
   },
 
   setTypingUserId: (id) => set({ typingUserId: id }),

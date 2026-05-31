@@ -13,7 +13,7 @@ import { useConversations } from "@/hooks/useConversations";
 import { useMessages }      from "@/hooks/useMessages";
 import { useWebSocket }     from "@/hooks/useWebSocket";
 import { messageService }   from "@/services";
-import type { ConversationResponse, MessageResponse, TypingEvent } from "@/types";
+import type { ConversationResponse, MessageResponse, TypingEvent, ReadReceiptEvent } from "@/types";
 
 function getUserIdFromToken(): number | null {
   try {
@@ -87,64 +87,81 @@ function ConversationsSidebar() {
 
 // ─── Panel de chat activo ─────────────────────────────────────────────────────
 function ActiveChat() {
-  const activeConversation    = useChatStore((s) => s.activeConversation);
-  const messages              = useChatStore((s) => s.messages);
-  const appendMessage         = useChatStore((s) => s.appendMessage);
-  const typingUserId          = useChatStore((s) => s.typingUserId);
-  const setTypingUserId       = useChatStore((s) => s.setTypingUserId);
+  const activeConversation = useChatStore((s) => s.activeConversation);
+  const messages           = useChatStore((s) => s.messages);
+  const appendMessage      = useChatStore((s) => s.appendMessage);
+  const markMessagesAsRead = useChatStore((s) => s.markMessagesAsRead);
+  const typingUserId       = useChatStore((s) => s.typingUserId);
+  const setTypingUserId    = useChatStore((s) => s.setTypingUserId);
+
   const { isLoading, error, hasMore, loadMore } = useMessages(
     activeConversation?.conversationId ?? null
   );
   const currentUserId = getUserIdFromToken();
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const appendMessageRef = useRef(appendMessage);
-  const setTypingRef     = useRef(setTypingUserId);
-  const currentUserIdRef = useRef(currentUserId);
-  useEffect(() => { appendMessageRef.current = appendMessage;   }, [appendMessage]);
-  useEffect(() => { setTypingRef.current     = setTypingUserId; }, [setTypingUserId]);
-  useEffect(() => { currentUserIdRef.current = currentUserId;   }, [currentUserId]);
+  // Refs estables para callbacks WS (evitan re-suscripciones innecesarias)
+  const appendMessageRef   = useRef(appendMessage);
+  const markReadRef        = useRef(markMessagesAsRead);
+  const setTypingRef       = useRef(setTypingUserId);
+  const currentUserIdRef   = useRef(currentUserId);
+  const activeConvRef      = useRef(activeConversation);
+  useEffect(() => { appendMessageRef.current   = appendMessage;       }, [appendMessage]);
+  useEffect(() => { markReadRef.current        = markMessagesAsRead;  }, [markMessagesAsRead]);
+  useEffect(() => { setTypingRef.current       = setTypingUserId;     }, [setTypingUserId]);
+  useEffect(() => { currentUserIdRef.current   = currentUserId;       }, [currentUserId]);
+  useEffect(() => { activeConvRef.current      = activeConversation;  }, [activeConversation]);
 
+  // Mensaje nuevo por WS — ya llega normalizado como MessageResponse
   const handleWsMessage = useCallback((msg: MessageResponse) => {
-    console.log("[ActiveChat] handleWsMessage:", msg, "currentUserId:", currentUserIdRef.current);
-    // NO filtrar por senderId aquí — mostrar todos los mensajes entrantes
-    // El store ya deduplica por messageId
     appendMessageRef.current(msg);
   }, []);
 
+  // Typing: el backend envía { userId, username, typing }
+  // Filtrar el propio usuario para no mostrar "escribiendo" a uno mismo
   const handleTyping = useCallback((evt: TypingEvent) => {
-    if (evt.senderId === currentUserIdRef.current) return;
-    setTypingRef.current(evt.typing ? evt.senderId : null);
+    if (evt.userId === currentUserIdRef.current) return;
+    setTypingRef.current(evt.typing ? evt.userId : null);
+    // Auto-limpiar tras 3s por si el backend no envía el false
     if (evt.typing) setTimeout(() => setTypingRef.current(null), 3_000);
+  }, []);
+
+  // Read receipt: actualiza el status de los mensajes en el store
+  // y dispara un refetch silencioso del sidebar (el unreadCount cambia en BD)
+  const handleReadReceipt = useCallback((evt: ReadReceiptEvent) => {
+    const convId = activeConvRef.current?.conversationId;
+    if (!convId) return;
+    markReadRef.current(convId, evt.readByUserId);
   }, []);
 
   useWebSocket({
     conversationId: activeConversation?.conversationId ?? null,
-    onMessage: handleWsMessage,
-    onTyping:  handleTyping,
+    onMessage:      handleWsMessage,
+    onTyping:       handleTyping,
+    onReadReceipt:  handleReadReceipt,
   });
 
+  // Scroll al último mensaje
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // markRead — ignorar error 500, no bloquear nada
+  // Marcar como leído al abrir conversación
   useEffect(() => {
     if (!activeConversation) return;
     messageService
       .markRead({ conversationId: activeConversation.conversationId })
-      .catch((e) => console.warn("[ChatPage] markRead falló (no crítico):", e?.response?.status));
+      .catch(() => {/* no crítico */});
   }, [activeConversation?.conversationId]);
 
   const handleSend = async (text: string) => {
     if (!activeConversation) return;
-    console.log("[ChatPage] Enviando mensaje via REST...");
     const msg = await messageService.send({
       conversationId: activeConversation.conversationId,
       type: "TEXT",
       textContent: text,
     });
-    console.log("[ChatPage] Mensaje enviado, añadiendo al store:", msg);
+    // Agregar optimistamente — el WS también lo trae pero el store deduplica
     appendMessage(msg);
   };
 
@@ -165,6 +182,7 @@ function ActiveChat() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Header */}
       <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-sm font-semibold text-white">
           {activeConversation.otherUsername.charAt(0).toUpperCase()}
@@ -183,6 +201,7 @@ function ActiveChat() {
         </div>
       </div>
 
+      {/* Mensajes */}
       <div className="flex-1 overflow-y-auto bg-gray-50 px-4 py-3">
         {hasMore && (
           <div className="mb-3 flex justify-center">
@@ -196,11 +215,14 @@ function ActiveChat() {
           <div className="flex justify-center py-8"><Spinner /></div>
         )}
         {error && <ErrorMessage message={error} />}
+
         {messages.map((msg) => (
           <MessageBubble key={msg.messageId} message={msg} currentUserId={currentUserId ?? 0} />
         ))}
+
+        {/* Indicador de typing con los 3 puntos */}
         {typingUserId && (
-          <div className="flex items-center gap-1 ml-1 mt-1">
+          <div className="flex items-center gap-1 ml-1 mt-1 mb-1">
             <span className="inline-flex gap-0.5">
               {[0, 150, 300].map((delay) => (
                 <span key={delay}
@@ -211,6 +233,7 @@ function ActiveChat() {
             <span className="text-xs text-gray-400">escribiendo</span>
           </div>
         )}
+
         <div ref={bottomRef} />
       </div>
 

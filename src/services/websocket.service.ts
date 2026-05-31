@@ -2,6 +2,7 @@ import { Client, type StompSubscription, type IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import type {
   MessageResponse,
+  WsOutboundMessage,
   TypingEvent,
   ReadReceiptEvent,
   PresenceEvent,
@@ -11,6 +12,24 @@ import type {
 const WS_URL =
   import.meta.env.VITE_WS_URL ??
   (import.meta.env.VITE_API_URL ?? "http://localhost:8080") + "/ws";
+
+// Convierte el shape del backend → shape que usa el frontend
+export function normalizeWsMessage(raw: WsOutboundMessage): MessageResponse {
+  return {
+    messageId: raw.messageId,
+    conversationId: raw.conversationId,
+    senderId: raw.senderId,
+    receiverId: raw.receiverId,
+    type: raw.type,
+    textContent: raw.textContent,
+    payload: raw.payload,
+    payloadType: raw.payloadType,
+    fileUrls: raw.fileUrls ?? [],
+    status: raw.status,
+    sentAt: raw.sentAt,
+    readAt: null,
+  };
+}
 
 type MessageHandler = (msg: MessageResponse) => void;
 type TypingHandler = (evt: TypingEvent) => void;
@@ -24,22 +43,12 @@ class WebSocketService {
 
   connect(token: string, onReady?: () => void): void {
     if (this.client?.connected) {
-      console.log(
-        "[WS] connect() → ya conectado, ejecutando onReady inmediatamente",
-      );
       onReady?.();
       return;
     }
-    if (onReady) {
-      console.log("[WS] connect() → encolando onReady");
-      this.onConnectQueue.push(onReady);
-    }
-    if (this.client) {
-      console.log("[WS] connect() → cliente activándose, esperando...");
-      return;
-    }
+    if (onReady) this.onConnectQueue.push(onReady);
+    if (this.client) return; // ya activándose
 
-    console.log("[WS] connect() → creando cliente STOMP, URL:", WS_URL);
     this.client = new Client({
       webSocketFactory: () => new SockJS(WS_URL) as WebSocket,
       connectHeaders: { Authorization: `Bearer ${token}` },
@@ -47,26 +56,21 @@ class WebSocketService {
       heartbeatIncoming: 10_000,
       heartbeatOutgoing: 10_000,
       onConnect: () => {
-        console.log(
-          `[WS] ✅ CONECTADO — ejecutando ${this.onConnectQueue.length} callbacks pendientes`,
-        );
         const queue = [...this.onConnectQueue];
         this.onConnectQueue = [];
         queue.forEach((fn) => fn());
       },
       onStompError: (f) =>
-        console.error("[WS] ❌ Error STOMP:", f.headers["message"]),
+        console.error("[WS] Error STOMP:", f.headers["message"]),
       onDisconnect: () => {
-        console.log("[WS] ⚠️ Desconectado");
         this.subscriptions.clear();
       },
-      onWebSocketError: (e) => console.error("[WS] ❌ Error WebSocket:", e),
+      onWebSocketError: (e) => console.error("[WS] Error WebSocket:", e),
     });
     this.client.activate();
   }
 
   disconnect(): void {
-    console.log("[WS] disconnect()");
     this.subscriptions.forEach((sub) => sub.unsubscribe());
     this.subscriptions.clear();
     this.onConnectQueue = [];
@@ -79,42 +83,33 @@ class WebSocketService {
   }
 
   private _subscribe(dest: string, handler: (f: IMessage) => void): void {
-    if (!this.client?.connected) {
-      console.warn("[WS] ⚠️ Sin conexión para suscribir:", dest);
-      return;
-    }
+    if (!this.client?.connected) return;
     const existing = this.subscriptions.get(dest);
     if (existing) {
-      console.log("[WS] Reemplazando suscripción:", dest);
       existing.unsubscribe();
       this.subscriptions.delete(dest);
     }
-    console.log("[WS] ✅ Suscrito a:", dest);
     this.subscriptions.set(dest, this.client.subscribe(dest, handler));
   }
 
   unsubscribe(dest: string): void {
     const sub = this.subscriptions.get(dest);
     if (sub) {
-      console.log("[WS] 🔕 Desuscrito de:", dest);
       sub.unsubscribe();
       this.subscriptions.delete(dest);
     }
   }
 
   private _publish(dest: string, body: object): void {
-    if (!this.client?.connected) {
-      console.warn("[WS] ⚠️ Sin conexión para publicar:", dest);
-      return;
-    }
+    if (!this.client?.connected) return;
     this.client.publish({ destination: dest, body: JSON.stringify(body) });
   }
 
+  // Deserializa como WsOutboundMessage y normaliza a MessageResponse
   subscribeToConversation(id: number, handler: MessageHandler): void {
     this._subscribe(`/topic/conversation.${id}`, (f) => {
-      const msg = JSON.parse(f.body) as MessageResponse;
-      console.log(`[WS] 📨 Mensaje en /topic/conversation.${id}:`, msg);
-      handler(msg);
+      const raw = JSON.parse(f.body) as WsOutboundMessage;
+      handler(normalizeWsMessage(raw));
     });
   }
   unsubscribeFromConversation(id: number): void {
@@ -122,14 +117,18 @@ class WebSocketService {
   }
 
   subscribeToTyping(id: number, handler: TypingHandler): void {
-    this._subscribe(`/topic/typing.${id}`, (f) => handler(JSON.parse(f.body)));
+    this._subscribe(`/topic/typing.${id}`, (f) =>
+      handler(JSON.parse(f.body) as TypingEvent),
+    );
   }
   unsubscribeFromTyping(id: number): void {
     this.unsubscribe(`/topic/typing.${id}`);
   }
 
   subscribeToReadReceipts(id: number, handler: ReadHandler): void {
-    this._subscribe(`/topic/read.${id}`, (f) => handler(JSON.parse(f.body)));
+    this._subscribe(`/topic/read.${id}`, (f) =>
+      handler(JSON.parse(f.body) as ReadReceiptEvent),
+    );
   }
   unsubscribeFromReadReceipts(id: number): void {
     this.unsubscribe(`/topic/read.${id}`);
@@ -142,11 +141,9 @@ class WebSocketService {
   }
 
   subscribeToNotifications(handler: (data: unknown) => void): void {
-    this._subscribe("/user/queue/notifications", (f) => {
-      const data = JSON.parse(f.body);
-      console.log("[WS] 🔔 Notificación recibida:", data);
-      handler(data);
-    });
+    this._subscribe("/user/queue/notifications", (f) =>
+      handler(JSON.parse(f.body)),
+    );
   }
   unsubscribeFromNotifications(): void {
     this.unsubscribe("/user/queue/notifications");
