@@ -1,15 +1,5 @@
 import axios from "axios";
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  ★  URL DEL BACKEND
-//
-//  Lee desde .env → variable VITE_API_URL
-//  Si no existe, usa http://localhost:8080 como fallback.
-//
-//  Para cambiarla:
-//    Desarrollo → edita .env:  VITE_API_URL=http://localhost:8080
-//    Producción → configura en tu plataforma (Vercel, Render, etc.)
-// ─────────────────────────────────────────────────────────────────────────────
 export const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
 export const apiClient = axios.create({
@@ -18,23 +8,32 @@ export const apiClient = axios.create({
   timeout: 10_000,
 });
 
-// Añade el JWT automáticamente en cada request
+// Lee el token desde la estructura que guarda zustand persist
+function getTokenFromStorage(): string | null {
+  try {
+    const raw = localStorage.getItem("auth-storage");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.state?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token = getTokenFromStorage();
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
   (error) => Promise.reject(error),
 );
 
-// 401 global → limpia sesión y redirige al login
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+      localStorage.removeItem("auth-storage");
       window.location.href = "/login";
     }
     return Promise.reject(error);

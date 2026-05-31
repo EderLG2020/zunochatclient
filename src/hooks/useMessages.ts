@@ -1,61 +1,67 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { messageService } from "@/services";
-import type { MessageResponse } from "@/types";
+import { useChatStore } from "@/store/chatstore";
 
 interface UseMessagesReturn {
-  messages: MessageResponse[];
   isLoading: boolean;
   error: string | null;
   hasMore: boolean;
   loadMore: () => void;
 }
 
-// Los mensajes del backend vienen más recientes primero → este hook los invierte
 export function useMessages(conversationId: number | null): UseMessagesReturn {
-  const [messages, setMessages] = useState<MessageResponse[]>([]);
+  const setMessages = useChatStore((s) => s.setMessages);
+  const prependMessages = useChatStore((s) => s.prependMessages);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  const fetchPage = useCallback(
-    async (pageNum: number, reset = false) => {
-      if (!conversationId) return;
-      try {
-        setIsLoading(true);
-        setError(null);
-        const result = await messageService.list(conversationId, pageNum, 30);
-        const sorted = [...result.content].reverse(); // más antiguo arriba
-        setMessages((prev) => (reset ? sorted : [...sorted, ...prev]));
-        setHasMore(!result.last);
-      } catch (err: unknown) {
-        setError(
-          err instanceof Error ? err.message : "Error al cargar mensajes",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [conversationId],
-  );
+  const pageRef = useRef(0);
+  const conversationIdRef = useRef(conversationId);
+  const setMessagesRef = useRef(setMessages);
+  const prependRef = useRef(prependMessages);
 
-  // Reset al cambiar de conversación
   useEffect(() => {
-    if (!conversationId) {
-      setMessages([]);
-      return;
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+  useEffect(() => {
+    setMessagesRef.current = setMessages;
+  }, [setMessages]);
+  useEffect(() => {
+    prependRef.current = prependMessages;
+  }, [prependMessages]);
+
+  const fetchPageRef = useRef(async (pageNum: number, reset = false) => {
+    const convId = conversationIdRef.current;
+    if (!convId) return;
+    try {
+      setIsLoading(true);
+      setError(null);
+      const result = await messageService.list(convId, pageNum, 30);
+      const sorted = [...result.content].reverse();
+      if (reset) setMessagesRef.current(sorted);
+      else prependRef.current(sorted);
+      setHasMore(!result.last);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error al cargar mensajes");
+    } finally {
+      setIsLoading(false);
     }
-    setPage(0);
-    setHasMore(true);
-    fetchPage(0, true);
-  }, [conversationId, fetchPage]);
+  });
+
+  useEffect(() => {
+    if (!conversationId) return;
+    pageRef.current = 0;
+    fetchPageRef.current(0, true);
+  }, [conversationId]);
 
   const loadMore = useCallback(() => {
     if (!hasMore || isLoading) return;
-    const next = page + 1;
-    setPage(next);
-    fetchPage(next);
-  }, [hasMore, isLoading, page, fetchPage]);
+    const next = pageRef.current + 1;
+    pageRef.current = next;
+    fetchPageRef.current(next, false);
+  }, [hasMore, isLoading]);
 
-  return { messages, isLoading, error, hasMore, loadMore };
+  return { isLoading, error, hasMore, loadMore };
 }

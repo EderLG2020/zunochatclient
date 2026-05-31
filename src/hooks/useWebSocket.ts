@@ -10,7 +10,6 @@ interface UseWebSocketOptions {
   onReadReceipt?: (evt: ReadReceiptEvent) => void;
 }
 
-// Gestiona suscripciones STOMP para la conversación activa
 export function useWebSocket({
   conversationId,
   onMessage,
@@ -19,10 +18,10 @@ export function useWebSocket({
 }: UseWebSocketOptions): void {
   const token = useAuthStore((s) => s.token);
 
-  // Refs para no re-suscribir en cada re-render
   const onMessageRef = useRef(onMessage);
   const onTypingRef = useRef(onTyping);
   const onReadReceiptRef = useRef(onReadReceipt);
+
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
@@ -34,29 +33,49 @@ export function useWebSocket({
   }, [onReadReceipt]);
 
   useEffect(() => {
-    if (!conversationId || !token) return;
-    if (!wsService.isConnected) wsService.connect(token);
+    if (!conversationId || !token) {
+      console.log("[useWebSocket] Sin conversationId o token, no suscribir");
+      return;
+    }
 
-    const t = setTimeout(() => {
-      if (onMessageRef.current)
-        wsService.subscribeToConversation(conversationId, (msg) =>
-          onMessageRef.current?.(msg),
-        );
-      if (onTypingRef.current)
-        wsService.subscribeToTyping(conversationId, (evt) =>
-          onTypingRef.current?.(evt),
-        );
-      if (onReadReceiptRef.current)
-        wsService.subscribeToReadReceipts(conversationId, (evt) =>
-          onReadReceiptRef.current?.(evt),
-        );
-    }, 100);
+    console.log(
+      `[useWebSocket] Preparando suscripción para conversación ${conversationId}, isConnected=${wsService.isConnected}`,
+    );
 
-    return () => clearTimeout(t);
+    const subscribe = () => {
+      console.log(
+        `[useWebSocket] Ejecutando subscribe() para conversación ${conversationId}`,
+      );
+      wsService.subscribeToConversation(conversationId, (msg) => {
+        console.log("[useWebSocket] onMessage callback ejecutado:", msg);
+        onMessageRef.current?.(msg);
+      });
+      wsService.subscribeToTyping(conversationId, (evt) => {
+        onTypingRef.current?.(evt);
+      });
+      wsService.subscribeToReadReceipts(conversationId, (evt) => {
+        onReadReceiptRef.current?.(evt);
+      });
+    };
+
+    if (wsService.isConnected) {
+      subscribe();
+    } else {
+      console.log(
+        "[useWebSocket] No conectado, llamando connect() con callback",
+      );
+      wsService.connect(token, subscribe);
+    }
+
+    return () => {
+      console.log(`[useWebSocket] CLEANUP conversación ${conversationId}`);
+      wsService.unsubscribeFromConversation(conversationId);
+      wsService.unsubscribeFromTyping(conversationId);
+      wsService.unsubscribeFromReadReceipts(conversationId);
+    };
   }, [conversationId, token]);
 }
 
-// Envía "está escribiendo" con debounce automático de 2 s
 export function useTypingIndicator(conversationId: number | null) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

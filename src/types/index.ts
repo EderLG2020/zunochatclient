@@ -1,13 +1,12 @@
-// ─── Enums — espejo exacto de los enums del backend ──────────────────────────
-export type MessageType = "TEXT" | "PAYLOAD" | "FILE";
+// Enums — espejo exacto de los enums del backend
+export type MessageType = "TEXT" | "PAYLOAD" | "FILE" | "IMAGE";
 export type MessageStatus = "SENT" | "DELIVERED" | "READ";
-export type PayloadType = "CARD" | "LOCATION" | "CONTACT" | "CUSTOM";
-export type ConversationStatus = "ACTIVE" | "ARCHIVED" | "BLOCKED";
+export type PayloadType = "SALES" | "SYSTEM" | "SURVEY" | "CARD";
+export type ConversationStatus = "ONLINE" | "TYPING" | "OFFLINE" | "AWAY";
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-/** POST /api/auth/login  →  { identifier, password } */
+// Auth
 export interface LoginRequest {
-  identifier: string; // username o email
+  identifier: string;
   password: string;
 }
 export interface RegisterRequest {
@@ -22,14 +21,14 @@ export interface VerifyOtpRequest {
 }
 export interface AuthResponse {
   token: string;
-  tokenType: string; // "Bearer"
+  tokenType: string;
   username: string;
   email: string;
   role: string;
   permissions: string[];
 }
 
-// ─── Conversations ────────────────────────────────────────────────────────────
+// Conversations
 export interface ConversationResponse {
   conversationId: number;
   otherUserId: number;
@@ -37,7 +36,7 @@ export interface ConversationResponse {
   otherAvatar: string | null;
   lastMessagePreview: string | null;
   lastMessageIsMine: boolean;
-  lastMessageAt: string; // ISO datetime
+  lastMessageAt: string;
   status: ConversationStatus;
   unreadCount: number;
 }
@@ -45,7 +44,7 @@ export interface CreateConversationRequest {
   targetUserId: number;
 }
 
-// ─── Messages ─────────────────────────────────────────────────────────────────
+// Messages
 export interface MessageResponse {
   messageId: number;
   conversationId: number;
@@ -72,24 +71,23 @@ export interface MarkReadRequest {
   conversationId: number;
 }
 
-// ─── Envelope genérico del backend ───────────────────────────────────────────
+// Envelope genérico
 export interface ApiResponse<T> {
   code: string;
   message: string;
   data: T;
 }
-/** Page<T> de Spring Data */
 export interface Page<T> {
   content: T[];
   totalElements: number;
   totalPages: number;
-  number: number; // página actual (0-indexed)
+  number: number;
   size: number;
   last: boolean;
   first: boolean;
 }
 
-// ─── WebSocket events ─────────────────────────────────────────────────────────
+// WebSocket events
 export interface WsInboundMessage {
   conversationId: number;
   type: MessageType;
