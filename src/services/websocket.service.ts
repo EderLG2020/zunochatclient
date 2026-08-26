@@ -28,10 +28,13 @@ export function normalizeWsMessage(raw: WsOutboundMessage): MessageResponse {
     status: raw.status,
     sentAt: raw.sentAt,
     readAt: null,
+    deleted: raw.deleted,
+    editedAt: raw.editedAt,
   };
 }
 
-type MessageHandler = (msg: MessageResponse) => void;
+// eventType: "MESSAGE_RECEIVED" (mensaje nuevo) | "MESSAGE_UPDATED" (editado o borrado — mismo messageId)
+type MessageHandler = (msg: MessageResponse, eventType: string) => void;
 type TypingHandler = (evt: TypingEvent) => void;
 type ReadHandler = (evt: ReadReceiptEvent) => void;
 type PresenceHandler = (evt: PresenceEvent) => void;
@@ -109,7 +112,7 @@ class WebSocketService {
   subscribeToConversation(id: number, handler: MessageHandler): void {
     this._subscribe(`/topic/conversation.${id}`, (f) => {
       const raw = JSON.parse(f.body) as WsOutboundMessage;
-      handler(normalizeWsMessage(raw));
+      handler(normalizeWsMessage(raw), raw.eventType);
     });
   }
   unsubscribeFromConversation(id: number): void {
@@ -138,6 +141,9 @@ class WebSocketService {
     this._subscribe(`/topic/presence.${userId}`, (f) =>
       handler(JSON.parse(f.body)),
     );
+  }
+  unsubscribeFromPresence(userId: number): void {
+    this.unsubscribe(`/topic/presence.${userId}`);
   }
 
   subscribeToNotifications(handler: (data: unknown) => void): void {

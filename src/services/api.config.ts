@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getTokenFromStorage } from "@/lib/jwt";
 
 export const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
@@ -7,18 +8,6 @@ export const apiClient = axios.create({
   headers: { "Content-Type": "application/json" },
   timeout: 10_000,
 });
-
-// Lee el token desde la estructura que guarda zustand persist
-function getTokenFromStorage(): string | null {
-  try {
-    const raw = localStorage.getItem("auth-storage");
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed?.state?.token ?? null;
-  } catch {
-    return null;
-  }
-}
 
 apiClient.interceptors.request.use(
   (config) => {

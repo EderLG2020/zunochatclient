@@ -3,6 +3,7 @@ import type {
   ApiResponse,
   ConversationResponse,
   CreateConversationRequest,
+  MuteConversationRequest,
   Page,
 } from "@/types";
 
@@ -32,6 +33,18 @@ export const conversationService = {
   ): Promise<ConversationResponse> => {
     const res = await apiClient.post<ApiResponse<ConversationResponse>>(
       "/api/conversations",
+      payload,
+    );
+    return res.data.data;
+  },
+
+  // PATCH /api/conversations/{id}/mute
+  setMuted: async (
+    conversationId: number,
+    payload: MuteConversationRequest,
+  ): Promise<ConversationResponse> => {
+    const res = await apiClient.patch<ApiResponse<ConversationResponse>>(
+      `/api/conversations/${conversationId}/mute`,
       payload,
     );
     return res.data.data;

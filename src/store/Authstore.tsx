@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AuthResponse } from '@/types'
 import { wsService } from '@/services/websocket.service'
+import { authService } from '@/services/auth.service'
+import { getMsUntilExpiry } from '@/lib/jwt'
 
 interface AuthUser {
   username: string
@@ -18,7 +20,13 @@ interface AuthState {
   login: (auth: AuthResponse) => void
   logout: () => void
   hydrate: () => void
+  refreshIfNeeded: () => Promise<void>
 }
+
+/** Si al JWT le queda menos de esto, se renueva sola sin esperar a que expire. */
+const REFRESH_THRESHOLD_MS = 2 * 60 * 60 * 1000 // 2h
+/** Cada cuánto se revisa mientras la app sigue abierta. */
+const REFRESH_CHECK_INTERVAL_MS = 30 * 60 * 1000 // 30min
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -47,8 +55,34 @@ export const useAuthStore = create<AuthState>()(
       // Llama esto una vez al montar la app para reconectar WS si había sesión
       hydrate: () => {
         const { token } = get()
-        if (token) wsService.connect(token)
+        if (token) {
+          wsService.connect(token)
+          void get().refreshIfNeeded()
+          setInterval(() => void get().refreshIfNeeded(), REFRESH_CHECK_INTERVAL_MS)
+        }
         set({ isLoading: false })
+      },
+
+      // Renueva el JWT en silencio si le queda poco tiempo — evita que la
+      // sesión expire "en seco" a las 24h mientras la app sigue abierta.
+      // No reconecta el WS: el token nuevo solo hace falta para requests REST,
+      // la conexión WS ya autenticada sigue viva con la vieja hasta que se cierre.
+      refreshIfNeeded: async () => {
+        const { token, isAuthenticated } = get()
+        if (!token || !isAuthenticated) return
+        const msLeft = getMsUntilExpiry(token)
+        if (msLeft === null || msLeft > REFRESH_THRESHOLD_MS) return
+
+        try {
+          const auth = await authService.refresh(token)
+          set((state) => ({
+            token: auth.token,
+            user: state.user ? { ...state.user, permissions: auth.permissions, role: auth.role } : state.user,
+          }))
+        } catch {
+          // Token fuera de la ventana de gracia o cuenta ya no válida — se
+          // deja que el próximo 401 real dispare el logout normal.
+        }
       },
     }),
     {

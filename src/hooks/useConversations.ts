@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { conversationService } from "@/services";
 import { wsService } from "@/services/websocket.service";
 import { useAuthStore } from "@/store/authstore";
-import type { ConversationResponse } from "@/types";
+import { useChatStore } from "@/store/chatstore";
+import { getUserIdFromToken } from "@/lib/jwt";
+import { buildMessagePreview } from "@/lib/format";
+import type { ConversationResponse, WsOutboundMessage } from "@/types";
 
 interface UseConversationsReturn {
   conversations: ConversationResponse[];
@@ -18,6 +21,11 @@ export function useConversations(): UseConversationsReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const token = useAuthStore((s) => s.token);
+  const activeConversationId = useChatStore((s) => s.activeConversation?.conversationId ?? null);
+  const activeConversationIdRef = useRef(activeConversationId);
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
 
   // Carga inicial — muestra spinner
   const doFetch = useRef(async (silent = false) => {
@@ -37,15 +45,43 @@ export function useConversations(): UseConversationsReturn {
 
   useEffect(() => {
     void doFetch.current(false);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Notificación WS → refetch silencioso (sin flash de spinner ni isLoading=true)
+  // Notificación WS de un mensaje nuevo → actualiza esa conversación en memoria
+  // (preview, orden, no-leídos) con los datos que ya trae el propio evento,
+  // sin volver a pedir la lista completa al backend. Solo si la conversación
+  // todavía no existe en el estado local (chat nuevo) hace falta un refetch puntual.
   useEffect(() => {
     if (!token) return;
+    const currentUserId = getUserIdFromToken();
 
-    const onNotification = () => {
-      // Delay mínimo para que el backend haya persistido el cambio
-      setTimeout(() => void doFetch.current(true), 300);
+    const onNotification = (data: unknown) => {
+      const msg = data as WsOutboundMessage;
+      if (msg?.eventType !== "MESSAGE_RECEIVED" || typeof msg.conversationId !== "number") return;
+
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => c.conversationId === msg.conversationId);
+        if (idx === -1) {
+          // Conversación que el sidebar todavía no conoce (chat nuevo) — sí requiere datos del servidor
+          setTimeout(() => void doFetch.current(true), 300);
+          return prev;
+        }
+
+        const current = prev[idx];
+        const isMine = msg.senderId === currentUserId;
+        const isOpen = activeConversationIdRef.current === msg.conversationId;
+        const updated: ConversationResponse = {
+          ...current,
+          lastMessagePreview: buildMessagePreview(msg.type, msg.textContent, msg.payloadType),
+          lastMessageIsMine: isMine,
+          lastMessageAt: msg.sentAt,
+          unreadCount: isMine || isOpen ? current.unreadCount : current.unreadCount + 1,
+        };
+
+        // Sube al tope de la lista, como en WhatsApp
+        const rest = prev.filter((_, i) => i !== idx);
+        return [updated, ...rest];
+      });
     };
 
     const subscribe = () => wsService.subscribeToNotifications(onNotification);

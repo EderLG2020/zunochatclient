@@ -4,6 +4,7 @@ import { useChatStore } from "@/store/chatstore";
 
 interface UseMessagesReturn {
   isLoading: boolean;
+  isLoadingMore: boolean;
   error: string | null;
   hasMore: boolean;
   loadMore: () => void;
@@ -14,10 +15,11 @@ export function useMessages(conversationId: number | null): UseMessagesReturn {
   const prependMessages = useChatStore((s) => s.prependMessages);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
 
-  const pageRef = useRef(0);
+  const cursorRef = useRef<number | null>(null);
   const conversationIdRef = useRef(conversationId);
   const setMessagesRef = useRef(setMessages);
   const prependRef = useRef(prependMessages);
@@ -32,36 +34,37 @@ export function useMessages(conversationId: number | null): UseMessagesReturn {
     prependRef.current = prependMessages;
   }, [prependMessages]);
 
-  const fetchPageRef = useRef(async (pageNum: number, reset = false) => {
-    const convId = conversationIdRef.current;
-    if (!convId) return;
-    try {
-      setIsLoading(true);
-      setError(null);
-      const result = await messageService.list(convId, pageNum, 30);
-      const sorted = [...result.content].reverse();
-      if (reset) setMessagesRef.current(sorted);
-      else prependRef.current(sorted);
-      setHasMore(!result.last);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error al cargar mensajes");
-    } finally {
-      setIsLoading(false);
-    }
-  });
+  const fetchPageRef = useRef(
+    async (beforeId: number | null, opts: { reset: boolean }) => {
+      const convId = conversationIdRef.current;
+      if (!convId) return;
+      try {
+        if (opts.reset) setIsLoading(true); else setIsLoadingMore(true);
+        setError(null);
+        const result = await messageService.list(convId, beforeId, 30);
+        const sorted = [...result.content].reverse();
+        if (opts.reset) setMessagesRef.current(sorted);
+        else prependRef.current(sorted);
+        cursorRef.current = result.nextCursor;
+        setHasMore(result.hasMore);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Error al cargar mensajes");
+      } finally {
+        if (opts.reset) setIsLoading(false); else setIsLoadingMore(false);
+      }
+    },
+  );
 
   useEffect(() => {
     if (!conversationId) return;
-    pageRef.current = 0;
-    fetchPageRef.current(0, true);
+    cursorRef.current = null;
+    fetchPageRef.current(null, { reset: true });
   }, [conversationId]);
 
   const loadMore = useCallback(() => {
-    if (!hasMore || isLoading) return;
-    const next = pageRef.current + 1;
-    pageRef.current = next;
-    fetchPageRef.current(next, false);
-  }, [hasMore, isLoading]);
+    if (!hasMore || isLoading || isLoadingMore) return;
+    fetchPageRef.current(cursorRef.current, { reset: false });
+  }, [hasMore, isLoading, isLoadingMore]);
 
-  return { isLoading, error, hasMore, loadMore };
+  return { isLoading, isLoadingMore, error, hasMore, loadMore };
 }

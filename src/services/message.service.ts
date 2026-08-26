@@ -1,18 +1,22 @@
 import apiClient from "./api.config";
 import type {
   ApiResponse,
+  EditMessageRequest,
   MarkReadRequest,
+  MessageCursorPage,
   MessageResponse,
-  Page,
   SendMessageRequest,
 } from "@/types";
 
 /*
  * EJEMPLOS DE USO:
  *
- * // Obtener mensajes (vienen en orden inverso, el hook los invierte)
+ * // Obtener mensajes más recientes (vienen en orden inverso, el hook los invierte)
  *   const page = await messageService.list(42)
  *   console.log(page.content)   // MessageResponse[]
+ *
+ * // Obtener mensajes anteriores a un cursor (scroll hacia el pasado)
+ *   const older = await messageService.list(42, page.nextCursor)
  *
  * // Enviar mensaje de texto
  *   const msg = await messageService.send({
@@ -32,16 +36,17 @@ import type {
  *   await messageService.markRead({ conversationId: 42 })
  */
 export const messageService = {
-  // GET /api/messages?conversationId=42&page=0&size=30
-  // Los mensajes vienen más recientes primero → invertir antes de renderizar
+  // GET /api/messages?conversationId=42&beforeId=&size=30
+  // Paginación por cursor: sin beforeId trae los más recientes; con beforeId,
+  // los `size` mensajes anteriores a ese id. Vienen más recientes primero → el hook invierte.
   list: async (
     conversationId: number,
-    page = 0,
+    beforeId?: number | null,
     size = 30,
-  ): Promise<Page<MessageResponse>> => {
-    const res = await apiClient.get<ApiResponse<Page<MessageResponse>>>(
+  ): Promise<MessageCursorPage> => {
+    const res = await apiClient.get<ApiResponse<MessageCursorPage>>(
       "/api/messages",
-      { params: { conversationId, page, size } },
+      { params: { conversationId, beforeId: beforeId ?? undefined, size } },
     );
     return res.data.data;
   },
@@ -62,6 +67,18 @@ export const messageService = {
       "/api/messages/read",
       payload,
     );
+    return res.data.data;
+  },
+
+  // PATCH /api/messages/{id} — solo texto, solo el emisor, ventana de 15 min
+  edit: async (messageId: number, payload: EditMessageRequest): Promise<MessageResponse> => {
+    const res = await apiClient.patch<ApiResponse<MessageResponse>>(`/api/messages/${messageId}`, payload);
+    return res.data.data;
+  },
+
+  // DELETE /api/messages/{id} — soft delete, solo el emisor
+  delete: async (messageId: number): Promise<MessageResponse> => {
+    const res = await apiClient.delete<ApiResponse<MessageResponse>>(`/api/messages/${messageId}`);
     return res.data.data;
   },
 };

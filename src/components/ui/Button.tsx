@@ -5,10 +5,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode; isLoading?: boolean; variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
 }
 const variants = {
-  primary:   'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300',
-  secondary: 'bg-gray-100 text-gray-800 hover:bg-gray-200',
-  ghost:     'bg-transparent text-gray-600 hover:bg-gray-100',
-  danger:    'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300',
+  primary:   'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300 dark:disabled:bg-blue-900',
+  secondary: 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700',
+  ghost:     'bg-transparent text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800',
+  danger:    'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300 dark:disabled:bg-red-900',
 }
 
 export function Button({ children, isLoading = false, variant = 'primary', className = '', disabled, ...props }: ButtonProps) {

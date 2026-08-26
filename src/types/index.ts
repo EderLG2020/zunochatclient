@@ -27,6 +27,17 @@ export interface AuthResponse {
   role: string;
   permissions: string[];
 }
+export interface ResendOtpRequest {
+  email: string;
+}
+export interface ForgotPasswordRequest {
+  email: string;
+}
+export interface ResetPasswordRequest {
+  email: string;
+  otpCode: string;
+  newPassword: string;
+}
 
 // Conversations
 export interface ConversationResponse {
@@ -39,9 +50,13 @@ export interface ConversationResponse {
   lastMessageAt: string;
   status: ConversationStatus;
   unreadCount: number;
+  muted: boolean;
 }
 export interface CreateConversationRequest {
   targetUserId: number;
+}
+export interface MuteConversationRequest {
+  muted: boolean;
 }
 
 // Messages
@@ -58,6 +73,8 @@ export interface MessageResponse {
   status: MessageStatus;
   sentAt: string;
   readAt: string | null;
+  deleted: boolean;
+  editedAt: string | null;
 }
 export interface SendMessageRequest {
   conversationId: number;
@@ -70,12 +87,19 @@ export interface SendMessageRequest {
 export interface MarkReadRequest {
   conversationId: number;
 }
+export interface EditMessageRequest {
+  textContent: string;
+}
 
 // Envelope genérico
 export interface ApiResponse<T> {
+  success: boolean;
   code: string;
+  status: number;
   message: string;
+  timestamp: string;
   data: T;
+  errors?: Record<string, string>;
 }
 export interface Page<T> {
   content: T[];
@@ -85,6 +109,11 @@ export interface Page<T> {
   size: number;
   last: boolean;
   first: boolean;
+}
+export interface MessageCursorPage {
+  content: MessageResponse[];
+  hasMore: boolean;
+  nextCursor: number | null;
 }
 
 // WebSocket — entrante (cliente → servidor)
@@ -112,6 +141,8 @@ export interface WsOutboundMessage {
   fileUrls: string[];
   status: MessageStatus;
   sentAt: string;
+  deleted: boolean;
+  editedAt: string | null;
 }
 
 // WebSocket — eventos de control (shapes exactos del backend)
@@ -132,4 +163,31 @@ export interface PresenceEvent {
   username: string;
   online: boolean;
   lastSeen: string | null;
+}
+
+// Bloqueo de usuarios
+export interface BlockedUserResponse {
+  id: number;
+  username: string;
+  blockedAt: string;
+}
+
+// Panel de administración
+export type Role = "USER" | "ADMIN" | "SUPERADMIN";
+export type UserStatus = "PENDING_VERIFICATION" | "ACTIVE" | "BANNED" | "INACTIVE" | "DELETED";
+
+export interface AdminUserResponse {
+  id: number;
+  dni: string;
+  username: string;
+  email: string;
+  role: Role;
+  status: UserStatus;
+  createdAt: string;
+}
+export interface AssignRoleRequest {
+  role: string;
+}
+export interface ModerateUserRequest {
+  reason?: string;
 }

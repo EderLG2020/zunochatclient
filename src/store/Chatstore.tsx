@@ -14,6 +14,7 @@ interface ChatState {
   setMessages:           (msgs: MessageResponse[]) => void;
   prependMessages:       (msgs: MessageResponse[]) => void;
   appendMessage:         (msg: MessageResponse) => void;
+  updateMessage:         (msg: MessageResponse) => void;
   markMessagesAsRead:    (conversationId: number, readByUserId: number) => void;
   setTypingUserId:       (id: number | null) => void;
 }
@@ -43,6 +44,14 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const prev = get().messages;
     if (prev.some((m) => m.messageId === msg.messageId)) return;
     set({ messages: [...prev, msg] });
+  },
+
+  // Edición/borrado: reemplaza el mensaje existente por su versión actualizada.
+  // Si todavía no está en memoria (ej. llegó por WS antes de cargar la página), no hace nada.
+  updateMessage: (msg) => {
+    const prev = get().messages;
+    if (!prev.some((m) => m.messageId === msg.messageId)) return;
+    set({ messages: prev.map((m) => (m.messageId === msg.messageId ? msg : m)) });
   },
 
   // Cuando el receptor abre el chat y marca como leído,

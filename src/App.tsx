@@ -5,7 +5,9 @@ import { ProtectedRoute }  from '@/routes/ProtectedRoute'
 import { PublicRoute }     from '@/routes/PublicRoute'
 import { LoginPage }       from '@/pages/LoginPage'
 import { RegisterPage }    from '@/pages/RegisterPage'
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage'
 import { ChatPage }        from '@/pages/ChatPage'
+import { AdminPage }       from '@/pages/AdminPage'
 import { NotFoundPage }    from '@/pages/NotFoundPage'
 
 /*
@@ -31,13 +33,16 @@ export default function App() {
 
         {/* Rutas públicas */}
         <Route element={<PublicRoute />}>
-          <Route path="/login"    element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login"           element={<LoginPage />} />
+          <Route path="/register"        element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         </Route>
 
         {/* Rutas protegidas */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chat"  element={<ChatPage />} />
+          {/* AdminPage valida el rol y redirige a /chat si no corresponde */}
+          <Route path="/admin" element={<AdminPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

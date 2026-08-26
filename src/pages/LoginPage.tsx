@@ -31,11 +31,11 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
+    <div className="flex min-h-full items-center justify-center bg-gray-50 px-4 dark:bg-gray-950">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md dark:bg-gray-900">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-900">ZunoChat</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">ZunoChat</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Inicia sesión para continuar
           </p>
         </div>
@@ -58,8 +58,14 @@ export function LoginPage() {
             autoComplete="current-password"
             required
           />
+          <Link
+            to="/forgot-password"
+            className="-mt-2 self-end text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">
               {error}
             </p>
           )}
@@ -67,11 +73,11 @@ export function LoginPage() {
             Entrar
           </Button>
         </form>
-        <p className="mt-6 text-center text-sm text-gray-500">
+        <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
           ¿No tienes cuenta?{" "}
           <Link
             to="/register"
-            className="font-medium text-blue-600 hover:underline"
+            className="font-medium text-blue-600 hover:underline dark:text-blue-400"
           >
             Regístrate
           </Link>

@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/authstore";
 
 interface UseWebSocketOptions {
   conversationId: number | null;
-  onMessage?: (msg: MessageResponse) => void;
+  onMessage?: (msg: MessageResponse, eventType: string) => void;
   onTyping?: (evt: TypingEvent) => void;
   onReadReceipt?: (evt: ReadReceiptEvent) => void;
 }
@@ -33,22 +33,11 @@ export function useWebSocket({
   }, [onReadReceipt]);
 
   useEffect(() => {
-    if (!conversationId || !token) {
-      console.log("[useWebSocket] Sin conversationId o token, no suscribir");
-      return;
-    }
-
-    console.log(
-      `[useWebSocket] Preparando suscripción para conversación ${conversationId}, isConnected=${wsService.isConnected}`,
-    );
+    if (!conversationId || !token) return;
 
     const subscribe = () => {
-      console.log(
-        `[useWebSocket] Ejecutando subscribe() para conversación ${conversationId}`,
-      );
-      wsService.subscribeToConversation(conversationId, (msg) => {
-        console.log("[useWebSocket] onMessage callback ejecutado:", msg);
-        onMessageRef.current?.(msg);
+      wsService.subscribeToConversation(conversationId, (msg, eventType) => {
+        onMessageRef.current?.(msg, eventType);
       });
       wsService.subscribeToTyping(conversationId, (evt) => {
         onTypingRef.current?.(evt);
@@ -58,17 +47,10 @@ export function useWebSocket({
       });
     };
 
-    if (wsService.isConnected) {
-      subscribe();
-    } else {
-      console.log(
-        "[useWebSocket] No conectado, llamando connect() con callback",
-      );
-      wsService.connect(token, subscribe);
-    }
+    if (wsService.isConnected) subscribe();
+    else wsService.connect(token, subscribe);
 
     return () => {
-      console.log(`[useWebSocket] CLEANUP conversación ${conversationId}`);
       wsService.unsubscribeFromConversation(conversationId);
       wsService.unsubscribeFromTyping(conversationId);
       wsService.unsubscribeFromReadReceipts(conversationId);
