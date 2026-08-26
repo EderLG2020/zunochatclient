@@ -36,3 +36,29 @@ export function usePresenceSubscriptions(userIds: number[]): void {
 export function useIsOnline(userId: number | undefined): boolean | undefined {
   return usePresenceStore((s) => (userId != null ? s.byUserId[userId]?.online : undefined));
 }
+
+/**
+ * Mantiene vivo el TTL de presencia (65s) del propio usuario mientras esté
+ * autenticado. Sin esto, PresenceService marca "offline" a cualquiera que no
+ * escriba nada por más de 65s, aunque el WebSocket siga conectado — el ping
+ * STOMP (heartbeatIncoming/Outgoing) solo mantiene viva la conexión, no toca
+ * la presencia de aplicación. Montar una sola vez en un punto siempre activo
+ * mientras haya sesión (no depende de qué conversaciones estén visibles).
+ */
+export function useHeartbeat(): void {
+  const token = useAuthStore((s) => s.token);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const send = () => {
+      if (wsService.isConnected) wsService.sendHeartbeat();
+    };
+
+    if (wsService.isConnected) send();
+    else wsService.connect(token, send);
+
+    const interval = setInterval(send, 30_000);
+    return () => clearInterval(interval);
+  }, [token]);
+}

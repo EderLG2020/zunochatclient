@@ -13,7 +13,7 @@ import { useThemeStore }    from "@/store/themeStore";
 import { useConversations } from "@/hooks/useConversations";
 import { useMessages }      from "@/hooks/useMessages";
 import { useWebSocket }     from "@/hooks/useWebSocket";
-import { usePresenceSubscriptions, useIsOnline } from "@/hooks/usePresence";
+import { usePresenceSubscriptions, useIsOnline, useHeartbeat } from "@/hooks/usePresence";
 import { messageService, conversationService, userService } from "@/services";
 import { avatarGradient, dayLabel } from "@/lib/format";
 import { getUserIdFromToken } from "@/lib/jwt";
@@ -32,6 +32,9 @@ function ConversationsSidebar() {
 
   // Presencia en vivo: una suscripción WS por cada conversación visible
   usePresenceSubscriptions(conversations.map((c) => c.otherUserId));
+  // Mantiene viva la PROPIA presencia mientras haya sesión, sin depender de
+  // que existan conversaciones (ver useHeartbeat).
+  useHeartbeat();
 
   const handleConversationReady = (conv: ConversationResponse) => {
     setActiveConversation(conv);
