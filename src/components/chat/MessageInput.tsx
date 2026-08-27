@@ -1,21 +1,62 @@
-import { useState, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTypingIndicator } from '@/hooks/useWebSocket'
+import { newClientMessageId } from '@/lib/id'
 import { messageService, uploadService } from '@/services'
 import { useChatStore } from '@/store/chatstore'
+import { EmojiPicker } from '@/components/chat/EmojiPicker'
 
 interface Props { conversationId: number; onSend: (text: string) => Promise<void>; disabled?: boolean }
 
 const MAX_FILES = 3
+
+function resizeTextarea(el: HTMLTextAreaElement) {
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+}
 
 export function MessageInput({ conversationId, onSend, disabled = false }: Props) {
   const [text, setText]       = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isAttaching, setIsAttaching] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
+  const [showEmoji, setShowEmoji] = useState(false)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const emojiWrapperRef = useRef<HTMLDivElement>(null)
+  // Última posición del cursor en el textarea — se usa para insertar el
+  // emoji ahí en vez de siempre al final (el picker le roba el foco al
+  // textarea mientras está abierto, así que no se puede leer selectionStart
+  // recién al clickear un emoji).
+  const cursorPosRef = useRef(0)
+  // Posición a la que hay que mover el cursor DESPUÉS de que React actualice
+  // el DOM con el nuevo texto (no se puede hacer de forma síncrona en el
+  // mismo handler — el textarea todavía tiene el valor viejo en ese instante).
+  const pendingCursorRef = useRef<number | null>(null)
   const appendMessage = useChatStore((s) => s.appendMessage)
   const { sendTyping } = useTypingIndicator(conversationId)
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (emojiWrapperRef.current && !emojiWrapperRef.current.contains(e.target as Node)) {
+        setShowEmoji(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
+
+  useEffect(() => {
+    if (pendingCursorRef.current === null || !taRef.current) return
+    const pos = pendingCursorRef.current
+    pendingCursorRef.current = null
+    taRef.current.focus()
+    taRef.current.setSelectionRange(pos, pos)
+    resizeTextarea(taRef.current)
+  }, [text])
+
+  const trackCursor = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    cursorPosRef.current = e.currentTarget.selectionStart ?? text.length
+  }
 
   const handleSend = async () => {
     const trimmed = text.trim()
@@ -24,6 +65,7 @@ export function MessageInput({ conversationId, onSend, disabled = false }: Props
       setIsSending(true)
       await onSend(trimmed)
       setText('')
+      cursorPosRef.current = 0
       if (taRef.current) taRef.current.style.height = 'auto'
     } finally {
       setIsSending(false)
@@ -37,10 +79,16 @@ export function MessageInput({ conversationId, onSend, disabled = false }: Props
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value)
+    cursorPosRef.current = e.target.selectionStart ?? e.target.value.length
     sendTyping()
-    const ta = e.target
-    ta.style.height = 'auto'
-    ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`
+    resizeTextarea(e.target)
+  }
+
+  const handleEmojiSelect = (emoji: string) => {
+    const pos = cursorPosRef.current
+    setText((prev) => prev.slice(0, pos) + emoji + prev.slice(pos))
+    pendingCursorRef.current = pos + emoji.length
+    sendTyping()
   }
 
   const handleAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,6 +109,7 @@ export function MessageInput({ conversationId, onSend, disabled = false }: Props
         conversationId,
         type: allImages ? 'IMAGE' : 'FILE',
         fileUrls: urls,
+        clientMessageId: newClientMessageId(),
       })
       appendMessage(msg)
     } catch (err: unknown) {
@@ -100,9 +149,28 @@ export function MessageInput({ conversationId, onSend, disabled = false }: Props
               </svg>}
         </button>
 
+        <div ref={emojiWrapperRef} className="relative flex-shrink-0">
+          <button
+            onClick={() => setShowEmoji((v) => !v)}
+            disabled={disabled}
+            title="Insertar emoji"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-5 w-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.25 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
+            </svg>
+          </button>
+          {showEmoji && (
+            <div className="absolute bottom-full left-0 z-50 mb-2 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+              <EmojiPicker onSelect={handleEmojiSelect} />
+            </div>
+          )}
+        </div>
+
         <textarea ref={taRef} rows={1} value={text} onChange={handleChange} onKeyDown={handleKeyDown}
+          onSelect={trackCursor} onClick={trackCursor} onKeyUp={trackCursor}
           placeholder="Escribe un mensaje... (Enter para enviar)"
-          disabled={disabled || isSending}
+          disabled={disabled}
           className="flex-1 resize-none rounded-2xl border border-gray-300 bg-gray-50 px-4 py-2 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-800 dark:focus:ring-blue-900"
           style={{ maxHeight: '120px' }} />
 

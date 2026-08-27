@@ -2,6 +2,8 @@ import { memo, useState } from 'react'
 import type { MessageResponse } from '@/types'
 import { messageService } from '@/services'
 import { useChatStore } from '@/store/chatstore'
+import { useChatColorStore } from '@/store/chatColorStore'
+import { getChatColor } from '@/lib/chatColors'
 
 function StatusIcon({ status }: { status: MessageResponse['status'] }) {
   if (status === 'READ')      return <span className="text-blue-400 text-xs">✓✓</span>
@@ -21,6 +23,9 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
 
   const isMine = message.senderId === currentUserId
   const time   = new Date(message.sentAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+  // Color de "mis" burbujas — elegible por el usuario (por defecto azul, ver ChatColorPicker)
+  const chatColorKey = useChatColorStore((s) => s.color)
+  const chatColor = getChatColor(chatColorKey)
 
   // La ventana de 15 min para editar la valida el backend (MSG_EDIT_WINDOW_EXPIRED);
   // aquí solo se filtra por tipo/propiedad — evita depender de Date.now() en el
@@ -100,7 +105,7 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
       )}
 
       <div className={`max-w-[70%] rounded-2xl px-3 py-2 shadow-sm ${isMine
-        ? `rounded-tr-sm bg-blue-500 text-white ${isGroupStart ? '' : 'rounded-tr-2xl'}`
+        ? `rounded-tr-sm ${chatColor.bubble} text-white ${isGroupStart ? '' : 'rounded-tr-2xl'}`
         : `rounded-tl-sm bg-white text-gray-800 border border-gray-100 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 ${isGroupStart ? '' : 'rounded-tl-2xl'}`}`}>
 
         {isEditing ? (
@@ -130,7 +135,7 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
               <div className="flex flex-col gap-1">
                 {message.fileUrls.map((url, i) => (
                   <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                    className={`text-sm underline ${isMine ? 'text-blue-100' : 'text-blue-500 dark:text-blue-400'}`}>
+                    className={`text-sm underline ${isMine ? chatColor.bubbleTint : 'text-blue-500 dark:text-blue-400'}`}>
                     📎 Archivo {i + 1}
                   </a>
                 ))}
@@ -146,7 +151,7 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
               </div>
             )}
             {message.type === 'PAYLOAD' && (
-              <pre className={`text-xs ${isMine ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'}`}>
+              <pre className={`text-xs ${isMine ? chatColor.bubbleTint : 'text-gray-500 dark:text-gray-400'}`}>
                 {JSON.stringify(message.payload, null, 2)}
               </pre>
             )}
@@ -155,9 +160,9 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
 
         <div className={`flex items-center gap-1 mt-1 ${isMine ? 'justify-end' : 'justify-start'}`}>
           {message.editedAt && (
-            <span className={`text-[10px] italic ${isMine ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'}`}>editado</span>
+            <span className={`text-[10px] italic ${isMine ? chatColor.bubbleTint : 'text-gray-400 dark:text-gray-500'}`}>editado</span>
           )}
-          <span className={`text-[10px] ${isMine ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'}`}>{time}</span>
+          <span className={`text-[10px] ${isMine ? chatColor.bubbleTint : 'text-gray-400 dark:text-gray-500'}`}>{time}</span>
           {isMine && <StatusIcon status={message.status} />}
         </div>
       </div>

@@ -83,6 +83,8 @@ export interface SendMessageRequest {
   payload?: unknown;
   payloadType?: PayloadType;
   fileUrls?: string[];
+  /** Ver lib/id.ts — reintentos idempotentes del POST. */
+  clientMessageId?: string;
 }
 export interface MarkReadRequest {
   conversationId: number;
@@ -124,6 +126,7 @@ export interface WsInboundMessage {
   payload?: unknown;
   payloadType?: PayloadType;
   fileUrls?: string[];
+  clientMessageId?: string;
 }
 
 // WebSocket — WsOutboundMessage (backend → /topic/conversation.{id})

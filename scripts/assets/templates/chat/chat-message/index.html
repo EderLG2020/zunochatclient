@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" />
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="avatar-wrap">
+        {{#if avatar}}
+        <img class="avatar" src="{{avatar}}" alt="{{user}}" />
+        {{else}}
+        <div class="avatar"></div>
+        {{/if}}
+        <span class="status-dot {{status}}"></span>
+      </div>
+      <div class="identity">
+        <span class="username">{{user}}</span>
+        <span class="status-label {{status}}">{{status}}</span>
+      </div>
+    </div>
+    <div class="bubble">{{message}}</div>
+    <span class="time">{{time}}</span>
+  </div>
+</body>
+</html>

@@ -58,22 +58,41 @@ export function useWebSocket({
   }, [conversationId, token]);
 }
 
+// No reenviar "typing:true" más seguido que esto mientras la persona sigue
+// escribiendo — sin este throttle, cada tecla presionada mandaba un publish
+// WS aparte (una oración tipeada rápido disparaba decenas de mensajes/
+// broadcasts innecesarios; el otro lado solo necesita saber "sigue
+// escribiendo" cada tanto, no en cada letra).
+const TYPING_RESEND_THROTTLE_MS = 2_000;
+// Tras esta pausa sin tipear, se manda el "false" explícito.
+const TYPING_STOP_DELAY_MS = 2_000;
+
 export function useTypingIndicator(conversationId: number | null) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSentAtRef = useRef(0);
 
   const sendTyping = useCallback(() => {
     if (!conversationId) return;
-    wsService.sendTyping(conversationId, true);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(
-      () => wsService.sendTyping(conversationId, false),
-      2_000,
-    );
+
+    const now = Date.now();
+    if (now - lastSentAtRef.current >= TYPING_RESEND_THROTTLE_MS) {
+      wsService.sendTyping(conversationId, true);
+      lastSentAtRef.current = now;
+    }
+
+    // El aviso de "dejó de escribir" sí se reprograma en cada tecla — es
+    // puramente local (un solo setTimeout, sin red) y determina cuándo el
+    // otro lado deja de ver el indicador.
+    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+    stopTimerRef.current = setTimeout(() => {
+      wsService.sendTyping(conversationId, false);
+      lastSentAtRef.current = 0;
+    }, TYPING_STOP_DELAY_MS);
   }, [conversationId]);
 
   useEffect(
     () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     },
     [],
   );

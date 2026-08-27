@@ -1,0 +1,10 @@
+{
+  "title": "Reporte de actividad",
+  "date": "27 de agosto de 2026",
+  "rows": [
+    { "label": "Usuarios totales", "value": "203" },
+    { "label": "Conversaciones activas", "value": "40" },
+    { "label": "Mensajes enviados", "value": "512" },
+    { "label": "Usuarios en línea", "value": "18" }
+  ]
+}

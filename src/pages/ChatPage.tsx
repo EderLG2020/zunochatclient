@@ -5,6 +5,8 @@ import { ConversationItem } from "@/components/chat/ConversationItem";
 import { UserSearch }       from "@/components/chat/UserSearch";
 import { MessageBubble }    from "@/components/chat/MessageBubble";
 import { MessageInput }     from "@/components/chat/MessageInput";
+import { Avatar }           from "@/components/chat/Avatar";
+import { SettingsModal }    from "@/components/settings/SettingsModal";
 import { Spinner }          from "@/components/ui/Spinner";
 import { ErrorMessage }     from "@/components/ui/ErrorMessage";
 import { useAuthStore }     from "@/store/authstore";
@@ -17,6 +19,7 @@ import { usePresenceSubscriptions, useIsOnline, useHeartbeat } from "@/hooks/use
 import { messageService, conversationService, userService } from "@/services";
 import { avatarGradient, dayLabel } from "@/lib/format";
 import { getUserIdFromToken } from "@/lib/jwt";
+import { newClientMessageId } from "@/lib/id";
 import type { ConversationResponse, MessageResponse, TypingEvent, ReadReceiptEvent } from "@/types";
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
@@ -27,8 +30,9 @@ function ConversationsSidebar() {
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const theme                 = useThemeStore((s) => s.theme);
   const toggleTheme           = useThemeStore((s) => s.toggleTheme);
-  const { conversations, isLoading, error, refetch } = useConversations();
+  const { conversations, isLoading, error, refetch, markConversationRead } = useConversations();
   const navigate = useNavigate();
+  const [showSettings, setShowSettings] = useState(false);
 
   // Presencia en vivo: una suscripción WS por cada conversación visible
   usePresenceSubscriptions(conversations.map((c) => c.otherUserId));
@@ -40,6 +44,15 @@ function ConversationsSidebar() {
     setActiveConversation(conv);
     const exists = conversations.some((c) => c.conversationId === conv.conversationId);
     if (!exists) refetch();
+  };
+
+  // Limpia el badge de no-leídos al instante al abrir la conversación — el
+  // backend ya lo pone en 0 (ActiveChat llama a markRead por REST), pero
+  // sin este patch local el número se quedaba pegado hasta el próximo
+  // refetch completo del sidebar.
+  const handleSelectConversation = (conv: ConversationResponse) => {
+    markConversationRead(conv.conversationId);
+    setActiveConversation(conv);
   };
 
   return (
@@ -69,6 +82,16 @@ function ConversationsSidebar() {
               </svg>
             </button>
           )}
+          <button
+            onClick={() => setShowSettings(true)}
+            title="Configuración"
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+              strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+            </svg>
+          </button>
           <button
             onClick={toggleTheme}
             title={theme === "dark" ? "Modo claro" : "Modo oscuro"}
@@ -115,10 +138,12 @@ function ConversationsSidebar() {
             key={conv.conversationId}
             conversation={conv}
             isActive={activeConversation?.conversationId === conv.conversationId}
-            onSelect={setActiveConversation}
+            onSelect={handleSelectConversation}
           />
         ))}
       </div>
+
+      <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }
@@ -239,18 +264,66 @@ function ActiveChat() {
   // Mensaje nuevo por WS — ya llega normalizado como MessageResponse.
   // eventType "MESSAGE_UPDATED" (edición/borrado) actualiza el mensaje existente
   // en vez de agregar uno nuevo — mismo topic, distinto tratamiento.
-  const handleWsMessage = useCallback((msg: MessageResponse, eventType: string) => {
-    if (eventType === "MESSAGE_UPDATED") updateMessageRef.current(msg);
-    else appendMessageRef.current(msg);
+  // Marca como leído: al abrir la conversación, al volver el foco/la pestaña
+  // (el usuario puede haber estado mirando otra app/pestaña cuando llegó el
+  // mensaje) y al recibir un mensaje nuevo mientras la conversación ya está
+  // abierta y visible. El backend es idempotente (solo actualiza filas con
+  // status <> READ, ver MessageRepository#markAsRead) — no reescribe
+  // readAt de mensajes que ya estaban en READ ni reemite el WS si no cambió
+  // nada, así que llamarlo de más no corrompe fechas ni satura la red.
+  // El debounce de acá es solo para no disparar 2 requests casi simultáneos
+  // cuando visibilitychange y focus se disparan juntos.
+  const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleMarkRead = useCallback(() => {
+    const convId = activeConvRef.current?.conversationId;
+    if (!convId || markReadTimerRef.current) return;
+    markReadTimerRef.current = setTimeout(() => {
+      markReadTimerRef.current = null;
+      messageService.markRead({ conversationId: convId }).catch(() => {/* no crítico */});
+    }, 150);
   }, []);
 
+  const handleWsMessage = useCallback((msg: MessageResponse, eventType: string) => {
+    if (eventType === "MESSAGE_UPDATED") { updateMessageRef.current(msg); return; }
+    appendMessageRef.current(msg);
+    // Solo si es un mensaje que me mandaron (no el mío) y ya estoy con este
+    // chat abierto — si además la pestaña no está visible, el efecto de
+    // visibilitychange se encarga cuando vuelva.
+    if (msg.senderId !== currentUserIdRef.current && document.visibilityState === "visible") {
+      scheduleMarkRead();
+    }
+  }, [scheduleMarkRead]);
+
   // Typing: el backend envía { userId, username, typing }
-  // Filtrar el propio usuario para no mostrar "escribiendo" a uno mismo
+  // Filtrar el propio usuario para no mostrar "escribiendo" a uno mismo.
+  // El timer de auto-limpieza vive en un ref (un solo timer, no uno por
+  // evento) — el emisor ahora reenvía "true" cada ~2s mientras sigue
+  // escribiendo (throttle, ver useTypingIndicator), así que sin esto un
+  // timer viejo podía "ganarle" a un evento más nuevo y apagar el
+  // indicador un instante aunque la persona siguiera escribiendo.
+  const typingClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleTyping = useCallback((evt: TypingEvent) => {
     if (evt.userId === currentUserIdRef.current) return;
-    setTypingRef.current(evt.typing ? evt.userId : null);
-    // Auto-limpiar tras 3s por si el backend no envía el false
-    if (evt.typing) setTimeout(() => setTypingRef.current(null), 3_000);
+
+    if (typingClearTimerRef.current) {
+      clearTimeout(typingClearTimerRef.current);
+      typingClearTimerRef.current = null;
+    }
+
+    if (evt.typing) {
+      setTypingRef.current(evt.userId);
+      // Red de seguridad por si el backend no llega a mandar el "false"
+      // (ej. el otro cierra la pestaña de golpe) — se reprograma en cada
+      // evento nuevo.
+      typingClearTimerRef.current = setTimeout(() => setTypingRef.current(null), 4_000);
+    } else {
+      setTypingRef.current(null);
+    }
+  }, []);
+
+  useEffect(() => () => {
+    if (typingClearTimerRef.current) clearTimeout(typingClearTimerRef.current);
   }, []);
 
   // Read receipt: actualiza el status de los mensajes en el store
@@ -268,13 +341,24 @@ function ActiveChat() {
     onReadReceipt:  handleReadReceipt,
   });
 
-  // Marcar como leído al abrir conversación
+  // Marcar como leído: al abrir/cambiar de conversación, y cada vez que la
+  // pestaña/ventana vuelve a estar activa mientras esta conversación sigue
+  // abierta (el usuario pudo haberse ido a otra app y volver sin cambiar de chat).
   useEffect(() => {
     if (!activeConversation) return;
-    messageService
-      .markRead({ conversationId: activeConversation.conversationId })
-      .catch(() => {/* no crítico */});
-  }, [activeConversation?.conversationId]);
+    scheduleMarkRead();
+
+    const onVisibility = () => { if (document.visibilityState === "visible") scheduleMarkRead(); };
+    const onFocus = () => scheduleMarkRead();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+      if (markReadTimerRef.current) { clearTimeout(markReadTimerRef.current); markReadTimerRef.current = null; }
+    };
+  }, [activeConversation?.conversationId, scheduleMarkRead]);
 
   const handleSend = async (text: string) => {
     if (!activeConversation) return;
@@ -282,6 +366,7 @@ function ActiveChat() {
       conversationId: activeConversation.conversationId,
       type: "TEXT",
       textContent: text,
+      clientMessageId: newClientMessageId(),
     });
     // Agregar optimistamente — el WS también lo trae pero el store deduplica
     appendMessage(msg);
@@ -336,9 +421,12 @@ function ActiveChat() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
           </svg>
         </button>
-        <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-sm font-semibold text-white ${avatarGradient(activeConversation.otherUserId)}`}>
-          {activeConversation.otherUsername.charAt(0).toUpperCase()}
-        </div>
+        <Avatar
+          src={activeConversation.otherAvatar}
+          seed={activeConversation.otherUserId}
+          label={activeConversation.otherUsername}
+          size="md"
+        />
         <div className="flex-1 min-w-0">
           <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{activeConversation.otherUsername}</p>
           <p className="text-xs text-gray-400 dark:text-gray-500">

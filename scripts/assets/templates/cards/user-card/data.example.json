@@ -1,0 +1,11 @@
+{
+  "username": "eder_lg",
+  "role": "ADMIN",
+  "avatar": "https://i.pravatar.cc/300?img=5",
+  "status": "online",
+  "stats": [
+    { "label": "Mensajes", "value": "128" },
+    { "label": "Conversaciones", "value": "14" },
+    { "label": "Desde", "value": "2025" }
+  ]
+}

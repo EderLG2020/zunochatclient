@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" />
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="page">
+    <div class="brand">ZunoChat</div>
+    <div class="title">{{title}}</div>
+    <div class="date">{{date}}</div>
+    <table>
+      <thead>
+        <tr><th>Métrica</th><th style="text-align:right">Valor</th></tr>
+      </thead>
+      <tbody>
+        {{#each rows}}
+        <tr>
+          <td>{{this.label}}</td>
+          <td class="value">{{this.value}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    <div class="footer">Generado automáticamente por scripts/assets — ZunoChat</div>
+  </div>
+</body>
+</html>

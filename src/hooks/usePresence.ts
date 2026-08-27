@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { wsService } from "@/services/websocket.service";
+import { presenceService } from "@/services/presence.service";
 import { useAuthStore } from "@/store/authstore";
 import { usePresenceStore } from "@/store/presencestore";
 
@@ -12,11 +13,14 @@ import { usePresenceStore } from "@/store/presencestore";
 export function usePresenceSubscriptions(userIds: number[]): void {
   const token = useAuthStore((s) => s.token);
   const applyEvent = usePresenceStore((s) => s.applyEvent);
+  const seedIfMissing = usePresenceStore((s) => s.seedIfMissing);
   const idsKey = [...new Set(userIds)].sort((a, b) => a - b).join(",");
 
   useEffect(() => {
     const ids = idsKey ? idsKey.split(",").map(Number) : [];
     if (!token || ids.length === 0) return;
+
+    let cancelled = false;
 
     const subscribe = () => {
       ids.forEach((id) => wsService.subscribeToPresence(id, applyEvent));
@@ -25,7 +29,17 @@ export function usePresenceSubscriptions(userIds: number[]): void {
     if (wsService.isConnected) subscribe();
     else wsService.connect(token, subscribe);
 
+    // Snapshot del estado actual — el WS solo avisa CAMBIOS a quien ya
+    // esté suscripto en ese momento; si el otro se conectó antes de que
+    // nosotros abriéramos la app, ese evento ya pasó y nunca llega. Esto
+    // completa el estado real sin esperar la próxima conexión/desconexión
+    // del otro usuario (ver PresenceController en el backend).
+    presenceService.snapshot(ids)
+      .then((entries) => { if (!cancelled) seedIfMissing(entries); })
+      .catch(() => {/* no crítico — el WS lo va a actualizar igual ante el próximo cambio */});
+
     return () => {
+      cancelled = true;
       ids.forEach((id) => wsService.unsubscribeFromPresence(id));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

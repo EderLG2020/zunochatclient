@@ -1,0 +1,13 @@
+{
+  "title": "María",
+  "avatar": "https://i.pravatar.cc/300?img=25",
+  "status": "online",
+  "messages": [
+    { "user": "María", "message": "Hola! ¿Cómo estás?", "time": "10:30", "isMine": false },
+    { "user": "Eder", "message": "Todo bien por acá, ¿y vos?", "time": "10:31", "isMine": true },
+    { "user": "María", "message": "¿Viste el partido de ayer?", "time": "10:31", "isMine": false },
+    { "user": "Eder", "message": "Sí! Estuvo increíble el final", "time": "10:32", "isMine": true },
+    { "user": "María", "message": "¿A qué hora nos juntamos?", "time": "10:33", "isMine": false },
+    { "user": "Eder", "message": "Puedo a las 5, ¿te sirve?", "time": "10:33", "isMine": true }
+  ]
+}

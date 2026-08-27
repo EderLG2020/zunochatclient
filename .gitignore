@@ -24,3 +24,12 @@ dist-ssr
 *.sw?
 zunochat-client.zip
 .env.example
+
+# Assets generados por `npm run asset:generate` (ver ASSETS_OUTPUT_DIR en .env.example)
+assets/generated/*
+!assets/generated/.gitkeep
+
+# HTML temporal que scripts/assets escribe al inyectar datos en un template
+# (se borra solo al terminar; esto es solo una red de seguridad por si el
+# proceso se corta a la mitad)
+scripts/assets/templates/**/.render-*.html

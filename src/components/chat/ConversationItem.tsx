@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { ConversationResponse } from "@/types";
-import { avatarGradient } from "@/lib/format";
+import { Avatar } from "@/components/chat/Avatar";
 import { useIsOnline } from "@/hooks/usePresence";
 
 function formatTime(iso: string): string {
@@ -18,7 +18,7 @@ interface Props { conversation: ConversationResponse; isActive: boolean; onSelec
 // memo + onSelect estable (en vez de un onClick inline por ítem) para que el
 // sidebar no re-renderice todas las conversaciones cada vez que cambia una sola.
 export const ConversationItem = memo(function ConversationItem({ conversation, isActive, onSelect }: Props) {
-  const { otherUserId, otherUsername, lastMessagePreview, lastMessageIsMine, lastMessageAt, unreadCount, status, muted } = conversation;
+  const { otherUserId, otherUsername, otherAvatar, lastMessagePreview, lastMessageIsMine, lastMessageAt, unreadCount, status, muted } = conversation;
   const preview = lastMessageIsMine ? `Tú: ${lastMessagePreview ?? ""}` : (lastMessagePreview ?? "");
 
   // Presencia en vivo por WS si ya llegó algún evento; si no, cae al status del REST inicial.
@@ -29,9 +29,7 @@ export const ConversationItem = memo(function ConversationItem({ conversation, i
     <button onClick={() => onSelect(conversation)}
       className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-gray-50 dark:hover:bg-gray-900 ${isActive ? "bg-blue-50 border-r-2 border-blue-500 dark:bg-blue-950/40" : ""}`}>
       <div className="relative flex-shrink-0">
-        <div className={`flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br text-sm font-semibold text-white ${avatarGradient(otherUserId)}`}>
-          {otherUsername.charAt(0).toUpperCase()}
-        </div>
+        <Avatar src={otherAvatar} seed={otherUserId} label={otherUsername} size="lg" />
         {isOnline && (
           <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-400 border-2 border-white dark:border-gray-950" />
         )}

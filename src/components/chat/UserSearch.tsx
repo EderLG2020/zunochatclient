@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { userService, type UserSearchResult } from "@/services/user.service";
 import { conversationService } from "@/services/conversation.service";
-import { avatarGradient } from "@/lib/format";
+import { Avatar } from "@/components/chat/Avatar";
 import type { ConversationResponse } from "@/types";
 
 interface Props {
@@ -95,9 +95,7 @@ export function UserSearch({ onConversationReady }: Props) {
                     disabled={isCreating === user.id}
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
                   >
-                    <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-xs font-semibold text-white ${avatarGradient(user.id)}`}>
-                      {user.username.charAt(0).toUpperCase()}
-                    </div>
+                    <Avatar src={user.avatar} seed={user.id} label={user.username} size="sm" />
                     <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{user.username}</span>
                     {isCreating === user.id && (
                       <span className="ml-auto h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />

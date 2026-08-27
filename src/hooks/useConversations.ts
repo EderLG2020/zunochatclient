@@ -12,6 +12,7 @@ interface UseConversationsReturn {
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
+  markConversationRead: (conversationId: number) => void;
 }
 
 export function useConversations(): UseConversationsReturn {
@@ -94,10 +95,25 @@ export function useConversations(): UseConversationsReturn {
     };
   }, [token]);
 
+  // El backend ya pone unread_count en 0 al abrir el chat (markRead vía REST
+  // en ActiveChat), pero eso solo vuelve al sidebar con un refetch completo.
+  // Este patch local es puramente en memoria (sin red) — limpia el badge al
+  // instante en vez de esperar a que llegue otro evento o se recargue la página.
+  const markConversationRead = (conversationId: number) => {
+    setConversations((prev) => {
+      const idx = prev.findIndex((c) => c.conversationId === conversationId);
+      if (idx === -1 || prev[idx].unreadCount === 0) return prev; // evita re-render innecesario
+      const next = [...prev];
+      next[idx] = { ...next[idx], unreadCount: 0 };
+      return next;
+    });
+  };
+
   return {
     conversations,
     isLoading,
     error,
     refetch: () => void doFetch.current(false),
+    markConversationRead,
   };
 }

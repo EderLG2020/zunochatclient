@@ -43,6 +43,8 @@ class WebSocketService {
   private client: Client | null = null;
   private subscriptions: Map<string, StompSubscription> = new Map();
   private onConnectQueue: Array<() => void> = [];
+  private reconnectListeners: Set<() => void> = new Set();
+  private hasConnectedBefore = false;
 
   connect(token: string, onReady?: () => void): void {
     if (this.client?.connected) {
@@ -62,6 +64,14 @@ class WebSocketService {
         const queue = [...this.onConnectQueue];
         this.onConnectQueue = [];
         queue.forEach((fn) => fn());
+
+        // onConnect también dispara en cada reconexión automática (reconnectDelay) —
+        // a partir de la segunda vez, avisamos a quien quiera hacer catch-up
+        // (ver useMessages) de lo que se perdió mientras el socket estaba caído.
+        if (this.hasConnectedBefore) {
+          this.reconnectListeners.forEach((fn) => fn());
+        }
+        this.hasConnectedBefore = true;
       },
       onStompError: (f) =>
         console.error("[WS] Error STOMP:", f.headers["message"]),
@@ -79,6 +89,13 @@ class WebSocketService {
     this.onConnectQueue = [];
     this.client?.deactivate();
     this.client = null;
+    this.hasConnectedBefore = false; // logout real: la próxima conexión vuelve a ser "la primera"
+  }
+
+  /** Se dispara en cada RE-conexión (no en la primera) — usar para "catch-up" tras una caída de red. Devuelve una función para des-registrar. */
+  onReconnect(fn: () => void): () => void {
+    this.reconnectListeners.add(fn);
+    return () => this.reconnectListeners.delete(fn);
   }
 
   get isConnected(): boolean {
