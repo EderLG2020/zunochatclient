@@ -1,5 +1,5 @@
 // Enums
-export type MessageType = "TEXT" | "PAYLOAD" | "FILE" | "IMAGE";
+export type MessageType = "TEXT" | "PAYLOAD" | "FILE" | "IMAGE" | "AUDIO";
 export type MessageStatus = "SENT" | "DELIVERED" | "READ";
 export type PayloadType = "SALES" | "SYSTEM" | "SURVEY" | "CARD";
 export type ConversationStatus = "ONLINE" | "TYPING" | "OFFLINE" | "AWAY";
@@ -19,6 +19,8 @@ export interface VerifyOtpRequest {
   email: string;
   otpCode: string;
 }
+export type ThemePreference = "LIGHT" | "DARK";
+
 export interface AuthResponse {
   token: string;
   tokenType: string;
@@ -26,6 +28,21 @@ export interface AuthResponse {
   email: string;
   role: string;
   permissions: string[];
+  themePreference: ThemePreference;
+}
+export interface GoogleAuthRequest {
+  code: string;
+}
+export interface GoogleAuthResponse {
+  needsUsername: boolean;
+  auth: AuthResponse | null;
+  registrationToken: string | null;
+  email: string | null;
+  suggestedUsername: string | null;
+}
+export interface CompleteGoogleRegistrationRequest {
+  registrationToken: string;
+  username: string;
 }
 export interface ResendOtpRequest {
   email: string;
@@ -40,23 +57,62 @@ export interface ResetPasswordRequest {
 }
 
 // Conversations
+export type ConversationType = "DIRECT" | "GROUP";
+
+export interface GroupMemberResponse {
+  userId: number;
+  username: string;
+  avatar: string | null;
+}
+
 export interface ConversationResponse {
   conversationId: number;
-  otherUserId: number;
-  otherUsername: string;
+  type: ConversationType;
+
+  /** Solo DIRECT — null en conversaciones GROUP */
+  otherUserId: number | null;
+  otherUsername: string | null;
   otherAvatar: string | null;
+
+  /** Solo GROUP — null en conversaciones DIRECT */
+  groupName: string | null;
+  groupAvatar: string | null;
+  members: GroupMemberResponse[] | null;
+
   lastMessagePreview: string | null;
   lastMessageIsMine: boolean;
   lastMessageAt: string;
   status: ConversationStatus;
   unreadCount: number;
   muted: boolean;
+  /** Chat temporal — compartido, no por lado: cualquier participante lo puede prender/apagar. */
+  ephemeralEnabled: boolean;
 }
 export interface CreateConversationRequest {
   targetUserId: number;
 }
+export interface CreateGroupRequest {
+  name: string;
+  /** No incluye al creador — se agrega automáticamente en el backend. */
+  memberIds: number[];
+}
 export interface MuteConversationRequest {
   muted: boolean;
+}
+export interface SetEphemeralRequest {
+  enabled: boolean;
+}
+
+// Perfil de usuario
+export interface UserProfileResponse {
+  id: number;
+  username: string;
+  email: string;
+  phone: string | null;
+  avatar: string | null;
+}
+export interface UpdatePhoneRequest {
+  phone: string | null;
 }
 
 // Messages
@@ -64,7 +120,8 @@ export interface MessageResponse {
   messageId: number;
   conversationId: number;
   senderId: number;
-  receiverId: number;
+  /** Null en mensajes de conversaciones GROUP — no hay un único receptor. */
+  receiverId: number | null;
   type: MessageType;
   textContent: string | null;
   payload: unknown | null;
@@ -75,6 +132,8 @@ export interface MessageResponse {
   readAt: string | null;
   deleted: boolean;
   editedAt: string | null;
+  /** No-null si se envió con "chat temporal" activo — se autoelimina en esa fecha. */
+  expiresAt: string | null;
 }
 export interface SendMessageRequest {
   conversationId: number;
@@ -136,7 +195,7 @@ export interface WsOutboundMessage {
   conversationId: number;
   senderId: number;
   senderUsername: string;
-  receiverId: number;
+  receiverId: number | null;
   type: MessageType;
   textContent: string | null;
   payload: unknown | null;
@@ -146,6 +205,7 @@ export interface WsOutboundMessage {
   sentAt: string;
   deleted: boolean;
   editedAt: string | null;
+  expiresAt: string | null;
 }
 
 // WebSocket — eventos de control (shapes exactos del backend)
@@ -166,6 +226,40 @@ export interface PresenceEvent {
   username: string;
   online: boolean;
   lastSeen: string | null;
+}
+
+// Racha (streak)
+export type StreakStatus = "INACTIVE" | "ACTIVE" | "AT_RISK" | "BROKEN";
+export type StreakRequestStatus = "NONE" | "PENDING" | "ACCEPTED" | "DECLINED";
+
+export interface StreakResponse {
+  conversationId: number;
+  /** true solo cuando AMBOS participantes aceptaron activarla — ver requestStatus. */
+  enabled: boolean;
+  currentCount: number;
+  longestCount: number;
+  lastInteractionDate: string | null;
+  status: StreakStatus;
+  requestStatus: StreakRequestStatus;
+  /** Quién envió la solicitud pendiente — null si no hay ninguna en curso. */
+  requestedByUserId: number | null;
+}
+export interface SetStreakEnabledRequest {
+  /** true → dispara/acepta una solicitud de activación. false → desactiva de inmediato. */
+  enabled: boolean;
+}
+export interface RespondStreakRequest {
+  accept: boolean;
+}
+
+// WebSocket — StreakEvent (backend → /topic/streak.{conversationId})
+export interface StreakEvent {
+  eventType: string; // REQUEST_SENT | REQUEST_ACCEPTED | REQUEST_DECLINED | INCREMENTED | RESET | AT_RISK | BROKEN | DISABLED
+  conversationId: number;
+  currentCount: number;
+  longestCount: number;
+  status: StreakStatus;
+  requestedByUserId: number | null;
 }
 
 // Bloqueo de usuarios

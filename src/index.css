@@ -14,3 +14,55 @@ body,
   margin: 0;
   padding: 0;
 }
+
+/* Animaciones globales, suaves y cortas (150-250ms) — pensadas para que algo
+   que aparece (un mensaje, un modal, un popover) entre con transición en vez
+   de "saltar" a la vista, sin llamar la atención de más. `both` fija el
+   estado inicial/final para que no haya parpadeo antes/después de animar. */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+/* Contador de racha (StreakBadge) al incrementar — un "salto" corto, no un fade. */
+@keyframes streak-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+/* Banner de "sin conexión" (ConnectionBanner) al aparecer en la parte superior. */
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in       { animation: fade-in 0.18s ease-out both; }
+.animate-fade-in-up     { animation: fade-in-up 0.22s ease-out both; }
+.animate-scale-in       { animation: scale-in 0.16s ease-out both; }
+.animate-slide-in-right { animation: slide-in-right 0.22s ease-out both; }
+.animate-streak-pop     { animation: streak-pop 0.35s ease-out; }
+.animate-slide-down     { animation: slide-down 0.2s ease-out both; }
+
+/* Quien pide menos movimiento en el SO no debería ver ninguna de estas —
+   se desactivan enteras en vez de solo acortarlas. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-scale-in,
+  .animate-slide-in-right,
+  .animate-streak-pop,
+  .animate-slide-down {
+    animation: none;
+  }
+}

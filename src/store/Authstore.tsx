@@ -4,6 +4,7 @@ import type { AuthResponse } from '@/types'
 import { wsService } from '@/services/websocket.service'
 import { authService } from '@/services/auth.service'
 import { getMsUntilExpiry } from '@/lib/jwt'
+import { useThemeStore, preferenceToTheme } from '@/store/themeStore'
 
 interface AuthUser {
   username: string
@@ -45,6 +46,9 @@ export const useAuthStore = create<AuthState>()(
         }
         set({ user, token: auth.token, isAuthenticated: true })
         wsService.connect(auth.token)
+        // Aplica la preferencia de tema guardada en la cuenta — mantiene el
+        // mismo tema entre dispositivos en vez de depender solo de localStorage.
+        useThemeStore.getState().setTheme(preferenceToTheme(auth.themePreference))
       },
 
       logout: () => {

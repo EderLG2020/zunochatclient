@@ -1,8 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout }        from "@/components/layout/AppLayout";
+import { ConnectionBanner } from "@/components/layout/ConnectionBanner";
 import { ConversationItem } from "@/components/chat/ConversationItem";
 import { UserSearch }       from "@/components/chat/UserSearch";
+import { CreateGroupModal } from "@/components/chat/CreateGroupModal";
+import { ContactProfilePanel } from "@/components/chat/ContactProfilePanel";
 import { MessageBubble }    from "@/components/chat/MessageBubble";
 import { MessageInput }     from "@/components/chat/MessageInput";
 import { Avatar }           from "@/components/chat/Avatar";
@@ -12,10 +15,13 @@ import { ErrorMessage }     from "@/components/ui/ErrorMessage";
 import { useAuthStore }     from "@/store/authstore";
 import { useChatStore }     from "@/store/chatstore";
 import { useThemeStore }    from "@/store/themeStore";
+import { useChatBackgroundStore } from "@/store/chatBackgroundStore";
+import { getChatBackground } from "@/lib/chatBackgrounds";
 import { useConversations } from "@/hooks/useConversations";
 import { useMessages }      from "@/hooks/useMessages";
 import { useWebSocket }     from "@/hooks/useWebSocket";
 import { usePresenceSubscriptions, useIsOnline, useHeartbeat } from "@/hooks/usePresence";
+import { useStreakSubscriptions } from "@/hooks/useStreaks";
 import { messageService, conversationService, userService } from "@/services";
 import { avatarGradient, dayLabel } from "@/lib/format";
 import { getUserIdFromToken } from "@/lib/jwt";
@@ -33,12 +39,24 @@ function ConversationsSidebar() {
   const { conversations, isLoading, error, refetch, markConversationRead } = useConversations();
   const navigate = useNavigate();
   const [showSettings, setShowSettings] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
 
-  // Presencia en vivo: una suscripción WS por cada conversación visible
-  usePresenceSubscriptions(conversations.map((c) => c.otherUserId));
+  // Presencia en vivo: una suscripción WS por cada conversación DIRECT visible
+  // (GROUP no tiene un único "otro usuario" del que trackear presencia).
+  const directOtherUserIds = conversations
+    .map((c) => c.otherUserId)
+    .filter((id): id is number => id != null);
+  usePresenceSubscriptions(directOtherUserIds);
   // Mantiene viva la PROPIA presencia mientras haya sesión, sin depender de
   // que existan conversaciones (ver useHeartbeat).
   useHeartbeat();
+
+  // Racha en vivo: una suscripción WS + un GET inicial por cada conversación
+  // DIRECT visible (GROUP no tiene racha, ver StreakService).
+  const directConversationIds = conversations
+    .filter((c) => c.type === "DIRECT")
+    .map((c) => c.conversationId);
+  useStreakSubscriptions(directConversationIds);
 
   const handleConversationReady = (conv: ConversationResponse) => {
     setActiveConversation(conv);
@@ -125,7 +143,20 @@ function ConversationsSidebar() {
         </div>
       </div>
 
-      <UserSearch onConversationReady={handleConversationReady} />
+      <div className="flex items-center gap-2 px-3 pt-2">
+        <div className="flex-1">
+          <UserSearch onConversationReady={handleConversationReady} />
+        </div>
+        <button
+          onClick={() => setShowCreateGroup(true)}
+          title="Nuevo grupo"
+          className="flex-shrink-0 rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+          </svg>
+        </button>
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         {isLoading && <div className="flex justify-center py-8"><Spinner /></div>}
@@ -144,6 +175,11 @@ function ConversationsSidebar() {
       </div>
 
       <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
+      <CreateGroupModal
+        open={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+        onCreated={handleConversationReady}
+      />
     </div>
   );
 }
@@ -158,6 +194,8 @@ function ActiveChat() {
   const markMessagesAsRead = useChatStore((s) => s.markMessagesAsRead);
   const typingUserId       = useChatStore((s) => s.typingUserId);
   const setTypingUserId    = useChatStore((s) => s.setTypingUserId);
+  const theme              = useThemeStore((s) => s.theme);
+  const chatBackgroundKey  = useChatBackgroundStore((s) => s.background);
 
   const activeConversationId = activeConversation?.conversationId ?? null;
   const { isLoading, isLoadingMore, error, hasMore, loadMore } = useMessages(activeConversationId);
@@ -166,13 +204,19 @@ function ActiveChat() {
   const scrollRef    = useRef<HTMLDivElement>(null);
   const topRef       = useRef<HTMLDivElement>(null);
 
-  // Menú de opciones del chat (silenciar / bloquear)
+  const isGroup = activeConversation?.type === "GROUP";
+
+  // Perfil del contacto (DIRECT) — reemplaza mensajes+input, se cierra al cambiar de conversación
+  const [showProfile, setShowProfile] = useState(false);
+  useEffect(() => { setShowProfile(false); }, [activeConversationId]);
+
+  // Menú de opciones del chat (silenciar / bloquear) — bloquear no aplica a GROUP
   const [menuOpen, setMenuOpen] = useState(false);
   const [blockedIds, setBlockedIds] = useState<Set<number>>(new Set());
   useEffect(() => {
     userService.listBlocked().then((list) => setBlockedIds(new Set(list.map((b) => b.id)))).catch(() => {});
   }, []);
-  const isBlocked = activeConversation ? blockedIds.has(activeConversation.otherUserId) : false;
+  const isBlocked = activeConversation?.otherUserId != null && blockedIds.has(activeConversation.otherUserId);
 
   const toggleMute = async () => {
     if (!activeConversation) return;
@@ -182,7 +226,7 @@ function ActiveChat() {
   };
 
   const toggleBlock = async () => {
-    if (!activeConversation) return;
+    if (!activeConversation || activeConversation.otherUserId == null) return;
     setMenuOpen(false);
     const otherId = activeConversation.otherUserId;
     if (isBlocked) {
@@ -195,8 +239,8 @@ function ActiveChat() {
     }
   };
 
-  // Presencia en vivo del contacto actual
-  const liveOnline = useIsOnline(activeConversation?.otherUserId);
+  // Presencia en vivo del contacto actual — sin sentido para GROUP
+  const liveOnline = useIsOnline(activeConversation?.otherUserId ?? undefined);
 
   // Scroll infinito real: al ver el sentinel de arriba, pedir mensajes anteriores
   // conservando la posición visual (sin saltos) en vez de un botón manual.
@@ -387,6 +431,24 @@ function ActiveChat() {
     );
   }
 
+  if (showProfile && !isGroup) {
+    return (
+      <ContactProfilePanel
+        conversation={activeConversation}
+        onBack={() => setShowProfile(false)}
+        onConversationUpdated={setActiveConversation}
+      />
+    );
+  }
+
+  // Fondo del chat: elegido en Configuración → Apariencia (useChatBackgroundStore),
+  // con una imagen distinta por tema — "Liso" no tiene URL en ningún tema.
+  const chatBg = getChatBackground(chatBackgroundKey);
+  const chatBgUrl = theme === "dark" ? chatBg.dark : chatBg.light;
+  const chatBgStyle = chatBgUrl
+    ? { backgroundImage: `url('${chatBgUrl}')`, backgroundSize: `${chatBg.size}px ${chatBg.size}px` }
+    : undefined;
+
   // Agrupa mensajes por día e indica cuáles son el primero de una racha del mismo
   // remitente, para separar visualmente sin repetir metadatos innecesarios.
   const rendered = messages.reduce<{
@@ -421,24 +483,43 @@ function ActiveChat() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
           </svg>
         </button>
-        <Avatar
-          src={activeConversation.otherAvatar}
-          seed={activeConversation.otherUserId}
-          label={activeConversation.otherUsername}
-          size="md"
-        />
-        <div className="flex-1 min-w-0">
-          <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{activeConversation.otherUsername}</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            {typingUserId ? (
-              <span className="text-blue-500 dark:text-blue-400">Escribiendo...</span>
-            ) : (liveOnline ?? activeConversation.status === "ONLINE") ? (
-              "En línea"
-            ) : (
-              "Desconectado"
-            )}
-          </p>
-        </div>
+        <button
+          onClick={() => { if (!isGroup) setShowProfile(true); }}
+          disabled={isGroup}
+          title={isGroup ? undefined : "Ver datos del contacto"}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default"
+        >
+          <Avatar
+            src={isGroup ? activeConversation.groupAvatar : activeConversation.otherAvatar}
+            seed={isGroup ? activeConversation.conversationId : (activeConversation.otherUserId ?? 0)}
+            label={isGroup ? (activeConversation.groupName ?? "Grupo") : (activeConversation.otherUsername ?? "")}
+            size="md"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {isGroup ? activeConversation.groupName : activeConversation.otherUsername}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              {typingUserId ? (
+                <span className="text-blue-500 dark:text-blue-400">Escribiendo...</span>
+              ) : isGroup ? (
+                `${activeConversation.members?.length ?? 0} miembros`
+              ) : (liveOnline ?? activeConversation.status === "ONLINE") ? (
+                "En línea"
+              ) : (
+                "Desconectado"
+              )}
+            </p>
+          </div>
+        </button>
+
+        {activeConversation.ephemeralEnabled && (
+          <span title="Chat temporal activado — los mensajes nuevos se autoeliminan en 24h" className="text-gray-400 dark:text-gray-500">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </span>
+        )}
 
         <div className="relative">
           <button
@@ -451,13 +532,15 @@ function ActiveChat() {
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+              <div className="animate-scale-in absolute right-0 top-full z-20 mt-1 w-52 origin-top-right overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
                 <button onClick={toggleMute} className="block w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700">
                   {activeConversation.muted ? "🔔 Reactivar notificaciones" : "🔇 Silenciar conversación"}
                 </button>
-                <button onClick={toggleBlock} className="block w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">
-                  {isBlocked ? "✅ Desbloquear usuario" : "🚫 Bloquear usuario"}
-                </button>
+                {!isGroup && (
+                  <button onClick={toggleBlock} className="block w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">
+                    {isBlocked ? "✅ Desbloquear usuario" : "🚫 Bloquear usuario"}
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -465,7 +548,11 @@ function ActiveChat() {
       </div>
 
       {/* Mensajes */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto bg-gray-50 px-4 py-3 dark:bg-gray-950">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto bg-gray-50 bg-repeat px-4 py-3 dark:bg-gray-950"
+        style={chatBgStyle}
+      >
         {/* Sentinel de scroll infinito: al hacerse visible, carga mensajes anteriores */}
         <div ref={topRef} />
         {isLoadingMore && (
@@ -520,10 +607,15 @@ function ActiveChat() {
 export function ChatPage() {
   const activeConversation = useChatStore((s) => s.activeConversation);
   return (
-    <AppLayout
-      sidebar={<ConversationsSidebar />}
-      main={<ActiveChat />}
-      showMainOnMobile={!!activeConversation}
-    />
+    <div className="flex h-full flex-col">
+      <ConnectionBanner />
+      <div className="min-h-0 flex-1">
+        <AppLayout
+          sidebar={<ConversationsSidebar />}
+          main={<ActiveChat />}
+          showMainOnMobile={!!activeConversation}
+        />
+      </div>
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { authService } from "@/services";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Button } from "@/components/ui/Button";
 
 type Step = "request" | "reset" | "done";
@@ -50,7 +51,7 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="flex min-h-full items-center justify-center bg-gray-50 px-4 dark:bg-gray-950">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md dark:bg-gray-900">
+      <div className="animate-fade-in-up w-full max-w-sm rounded-2xl bg-white p-8 shadow-md dark:bg-gray-900">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">ZunoChat</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -98,9 +99,8 @@ export function ForgotPasswordPage() {
               maxLength={6}
               required
             />
-            <Input
+            <PasswordInput
               label="Nueva contraseña"
-              type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               autoComplete="new-password"

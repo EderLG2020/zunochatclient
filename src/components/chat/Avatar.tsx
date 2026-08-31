@@ -4,13 +4,14 @@ interface Props {
   src: string | null | undefined;
   seed: number | string;
   label: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
 const SIZE_CLASSES: Record<NonNullable<Props["size"]>, string> = {
   sm: "h-8 w-8 text-xs",
   md: "h-9 w-9 text-sm",
   lg: "h-11 w-11 text-sm",
+  xl: "h-24 w-24 text-3xl",
 };
 
 /** Foto de perfil si hay `src`, si no cae al gradiente + inicial (comportamiento previo). */

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+  <defs>
+    <g id="i-bubble" fill="none" stroke="#cbd5e1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="-10" y="-8" width="20" height="14" rx="5"/>
+      <path d="M-5,6 L-8,13 L-1,6 Z"/>
+    </g>
+    <g id="i-heart" fill="none" stroke="#cbd5e1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0,4 C-1,-2 -9,-2 -9,3 C-9,8 -3,10 0,13 C3,10 9,8 9,3 C9,-2 1,-2 0,4 Z"/>
+    </g>
+    <g id="i-spark" fill="none" stroke="#cbd5e1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0,-9 L2,-2 L9,0 L2,2 L0,9 L-2,2 L-9,0 L-2,-2 Z"/>
+    </g>
+    <g id="i-plane" fill="none" stroke="#cbd5e1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M-10,8 L10,-9 L2,9 L-3,1 Z"/>
+      <path d="M10,-9 L-3,1"/>
+    </g>
+    <g id="i-flower" fill="#cbd5e1">
+      <circle cx="0" cy="-5" r="3.6"/>
+      <circle cx="0" cy="5" r="3.6"/>
+      <circle cx="-5" cy="0" r="3.6"/>
+      <circle cx="5" cy="0" r="3.6"/>
+      <circle cx="0" cy="0" r="2.2"/>
+    </g>
+    <g id="i-note" fill="#cbd5e1">
+      <ellipse cx="-2" cy="7" rx="3.2" ry="2.3" transform="rotate(-20 -2 7)"/>
+      <path d="M1,7 L1,-9 C4,-8 7,-6 7,-3" fill="none" stroke="#cbd5e1" stroke-width="1.4" stroke-linecap="round"/>
+    </g>
+  </defs>
+
+  <g opacity="0.12">
+    <use href="#i-bubble" x="34" y="42" transform="rotate(-8 34 42)"/>
+    <use href="#i-heart"  x="146" y="30" transform="rotate(10 146 30)"/>
+    <use href="#i-spark"  x="205" y="95"/>
+    <use href="#i-plane"  x="72" y="112" transform="rotate(-18 72 112)"/>
+    <use href="#i-flower" x="172" y="152"/>
+    <use href="#i-note"   x="24" y="176" transform="rotate(6 24 176)"/>
+    <use href="#i-bubble" x="212" y="204" transform="rotate(14 212 204)"/>
+    <use href="#i-spark"  x="94" y="205"/>
+    <use href="#i-heart"  x="222" y="132" transform="rotate(-6 222 132)"/>
+    <use href="#i-plane"  x="132" y="62" transform="rotate(28 132 62)"/>
+    <use href="#i-flower" x="52" y="222"/>
+    <use href="#i-note"   x="192" y="44" transform="rotate(-14 192 44)"/>
+  </g>
+</svg>

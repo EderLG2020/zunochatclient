@@ -6,8 +6,10 @@ import type {
   TypingEvent,
   ReadReceiptEvent,
   PresenceEvent,
+  StreakEvent,
   WsInboundMessage,
 } from "@/types";
+import { useConnectionStore } from "@/store/connectionStore";
 
 const WS_URL =
   import.meta.env.VITE_WS_URL ??
@@ -30,6 +32,7 @@ export function normalizeWsMessage(raw: WsOutboundMessage): MessageResponse {
     readAt: null,
     deleted: raw.deleted,
     editedAt: raw.editedAt,
+    expiresAt: raw.expiresAt,
   };
 }
 
@@ -38,6 +41,7 @@ type MessageHandler = (msg: MessageResponse, eventType: string) => void;
 type TypingHandler = (evt: TypingEvent) => void;
 type ReadHandler = (evt: ReadReceiptEvent) => void;
 type PresenceHandler = (evt: PresenceEvent) => void;
+type StreakHandler = (evt: StreakEvent) => void;
 
 class WebSocketService {
   private client: Client | null = null;
@@ -45,6 +49,7 @@ class WebSocketService {
   private onConnectQueue: Array<() => void> = [];
   private reconnectListeners: Set<() => void> = new Set();
   private hasConnectedBefore = false;
+  private manualDisconnect = false;
 
   connect(token: string, onReady?: () => void): void {
     if (this.client?.connected) {
@@ -54,6 +59,9 @@ class WebSocketService {
     if (onReady) this.onConnectQueue.push(onReady);
     if (this.client) return; // ya activándose
 
+    this.manualDisconnect = false;
+    useConnectionStore.getState().setStatus("connecting");
+
     this.client = new Client({
       webSocketFactory: () => new SockJS(WS_URL) as WebSocket,
       connectHeaders: { Authorization: `Bearer ${token}` },
@@ -61,6 +69,8 @@ class WebSocketService {
       heartbeatIncoming: 10_000,
       heartbeatOutgoing: 10_000,
       onConnect: () => {
+        useConnectionStore.getState().setStatus("connected");
+
         const queue = [...this.onConnectQueue];
         this.onConnectQueue = [];
         queue.forEach((fn) => fn());
@@ -78,18 +88,31 @@ class WebSocketService {
       onDisconnect: () => {
         this.subscriptions.clear();
       },
+      // Se dispara tanto en una caída inesperada (red, backend caído) como en
+      // cada intento fallido de la reconexión automática de stompjs — es la
+      // señal que usa el banner de "sin conexión" para saber cuándo mostrarse.
+      // Se ignora si fue un disconnect() deliberado (logout) para no dejar el
+      // banner colgado justo antes de navegar fuera de la pantalla de chat.
+      onWebSocketClose: () => {
+        if (this.manualDisconnect) return;
+        useConnectionStore
+          .getState()
+          .setStatus(this.hasConnectedBefore ? "reconnecting" : "connecting");
+      },
       onWebSocketError: (e) => console.error("[WS] Error WebSocket:", e),
     });
     this.client.activate();
   }
 
   disconnect(): void {
+    this.manualDisconnect = true;
     this.subscriptions.forEach((sub) => sub.unsubscribe());
     this.subscriptions.clear();
     this.onConnectQueue = [];
     this.client?.deactivate();
     this.client = null;
     this.hasConnectedBefore = false; // logout real: la próxima conexión vuelve a ser "la primera"
+    useConnectionStore.getState().setStatus("connecting"); // valor neutro para la próxima sesión
   }
 
   /** Se dispara en cada RE-conexión (no en la primera) — usar para "catch-up" tras una caída de red. Devuelve una función para des-registrar. */
@@ -161,6 +184,15 @@ class WebSocketService {
   }
   unsubscribeFromPresence(userId: number): void {
     this.unsubscribe(`/topic/presence.${userId}`);
+  }
+
+  subscribeToStreak(conversationId: number, handler: StreakHandler): void {
+    this._subscribe(`/topic/streak.${conversationId}`, (f) =>
+      handler(JSON.parse(f.body) as StreakEvent),
+    );
+  }
+  unsubscribeFromStreak(conversationId: number): void {
+    this.unsubscribe(`/topic/streak.${conversationId}`);
   }
 
   subscribeToNotifications(handler: (data: unknown) => void): void {

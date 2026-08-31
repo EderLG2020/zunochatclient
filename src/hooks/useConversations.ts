@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/authstore";
 import { useChatStore } from "@/store/chatstore";
 import { getUserIdFromToken } from "@/lib/jwt";
 import { buildMessagePreview } from "@/lib/format";
+import { playMessageReceivedSound } from "@/lib/notificationSound";
 import type { ConversationResponse, WsOutboundMessage } from "@/types";
 
 interface UseConversationsReturn {
@@ -60,17 +61,31 @@ export function useConversations(): UseConversationsReturn {
       const msg = data as WsOutboundMessage;
       if (msg?.eventType !== "MESSAGE_RECEIVED" || typeof msg.conversationId !== "number") return;
 
+      // Se decide DENTRO del updater (tiene el estado previo a mano) pero se
+      // reproduce FUERA — el updater de setState puede correr dos veces en
+      // desarrollo (React StrictMode) y no debe tener efectos secundarios
+      // audibles; acá solo queda una variable que se pisa a sí misma.
+      let shouldPlaySound = false;
+
       setConversations((prev) => {
         const idx = prev.findIndex((c) => c.conversationId === msg.conversationId);
         if (idx === -1) {
           // Conversación que el sidebar todavía no conoce (chat nuevo) — sí requiere datos del servidor
           setTimeout(() => void doFetch.current(true), 300);
+          shouldPlaySound = msg.senderId !== currentUserId;
           return prev;
         }
 
         const current = prev[idx];
         const isMine = msg.senderId === currentUserId;
         const isOpen = activeConversationIdRef.current === msg.conversationId;
+
+        // Solo mensajes ajenos y solo si la conversación no está silenciada —
+        // igual criterio que el badge de no leídos, sin importar si el chat
+        // está abierto (WhatsApp Web suena igual con la conversación abierta,
+        // salvo que esté silenciada).
+        shouldPlaySound = !isMine && !current.muted;
+
         const updated: ConversationResponse = {
           ...current,
           lastMessagePreview: buildMessagePreview(msg.type, msg.textContent, msg.payloadType),
@@ -83,6 +98,8 @@ export function useConversations(): UseConversationsReturn {
         const rest = prev.filter((_, i) => i !== idx);
         return [updated, ...rest];
       });
+
+      if (shouldPlaySound) playMessageReceivedSound();
     };
 
     const subscribe = () => wsService.subscribeToNotifications(onNotification);

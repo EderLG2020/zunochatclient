@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTypingIndicator } from '@/hooks/useWebSocket'
+import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import { newClientMessageId } from '@/lib/id'
 import { messageService, uploadService } from '@/services'
 import { useChatStore } from '@/store/chatstore'
 import { EmojiPicker } from '@/components/chat/EmojiPicker'
+import type { MessageType } from '@/types'
 
 interface Props { conversationId: number; onSend: (text: string) => Promise<void>; disabled?: boolean }
 
 const MAX_FILES = 3
+
+function formatSeconds(total: number): string {
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
 
 function resizeTextarea(el: HTMLTextAreaElement) {
   el.style.height = 'auto'
@@ -32,8 +40,10 @@ export function MessageInput({ conversationId, onSend, disabled = false }: Props
   // el DOM con el nuevo texto (no se puede hacer de forma síncrona en el
   // mismo handler — el textarea todavía tiene el valor viejo en ese instante).
   const pendingCursorRef = useRef<number | null>(null)
+  const [isSendingAudio, setIsSendingAudio] = useState(false)
   const appendMessage = useChatStore((s) => s.appendMessage)
   const { sendTyping } = useTypingIndicator(conversationId)
+  const recorder = useAudioRecorder()
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -91,6 +101,29 @@ export function MessageInput({ conversationId, onSend, disabled = false }: Props
     sendTyping()
   }
 
+  // Compartido por adjuntar archivos y por audio grabado: sube y crea el
+  // mensaje con las mismas reglas de error (incluye el timeout largo para
+  // subidas — ver upload.service.ts — y el mensaje específico si igual expira).
+  const uploadAndSend = async (files: File[], type: MessageType) => {
+    try {
+      setAttachError(null)
+      const urls = await uploadService.upload(files)
+      const msg = await messageService.send({
+        conversationId,
+        type,
+        fileUrls: urls,
+        clientMessageId: newClientMessageId(),
+      })
+      appendMessage(msg)
+    } catch (err: unknown) {
+      const e2 = err as { code?: string; response?: { data?: { message?: string } } }
+      const fallback = e2.code === 'ECONNABORTED'
+        ? 'La subida tardó demasiado. Probá con un archivo más liviano o revisá tu conexión.'
+        : 'No se pudo adjuntar el archivo.'
+      setAttachError(e2.response?.data?.message ?? fallback)
+    }
+  }
+
   const handleAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     e.target.value = '' // permite volver a elegir el mismo archivo después
@@ -100,31 +133,31 @@ export function MessageInput({ conversationId, onSend, disabled = false }: Props
       return
     }
 
-    try {
-      setIsAttaching(true)
+    setIsAttaching(true)
+    const allImages = files.every((f) => f.type.startsWith('image/'))
+    await uploadAndSend(files, allImages ? 'IMAGE' : 'FILE')
+    setIsAttaching(false)
+  }
+
+  const handleMicClick = async () => {
+    if (recorder.isRecording) {
+      const file = await recorder.stop()
+      if (!file) return
+      setIsSendingAudio(true)
       setAttachError(null)
-      const urls = await uploadService.upload(files)
-      const allImages = files.every((f) => f.type.startsWith('image/'))
-      const msg = await messageService.send({
-        conversationId,
-        type: allImages ? 'IMAGE' : 'FILE',
-        fileUrls: urls,
-        clientMessageId: newClientMessageId(),
-      })
-      appendMessage(msg)
-    } catch (err: unknown) {
-      const e2 = err as { response?: { data?: { message?: string } } }
-      setAttachError(e2.response?.data?.message ?? 'No se pudo adjuntar el archivo.')
-    } finally {
-      setIsAttaching(false)
+      await uploadAndSend([file], 'AUDIO')
+      setIsSendingAudio(false)
+      return
     }
+    setAttachError(null)
+    await recorder.start()
   }
 
   return (
     <div className="border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
-      {attachError && (
+      {(attachError || recorder.error) && (
         <p className="mb-2 rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600 dark:bg-red-950 dark:text-red-400">
-          {attachError}
+          {attachError || recorder.error}
         </p>
       )}
       <div className="flex items-end gap-2">
@@ -161,11 +194,48 @@ export function MessageInput({ conversationId, onSend, disabled = false }: Props
             </svg>
           </button>
           {showEmoji && (
-            <div className="absolute bottom-full left-0 z-50 mb-2 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+            <div className="animate-scale-in absolute bottom-full left-0 z-50 mb-2 origin-bottom-left rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
               <EmojiPicker onSelect={handleEmojiSelect} />
             </div>
           )}
         </div>
+
+        {recorder.isRecording && (
+          <button
+            onClick={recorder.cancel}
+            title="Cancelar grabación"
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-5 w-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+
+        {recorder.isRecording && (
+          <span className="flex-shrink-0 text-xs tabular-nums text-red-500">{formatSeconds(recorder.seconds)}</span>
+        )}
+
+        <button
+          onClick={handleMicClick}
+          disabled={disabled || isSendingAudio}
+          title={recorder.isRecording ? 'Detener y enviar' : 'Grabar audio'}
+          className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${
+            recorder.isRecording
+              ? 'animate-pulse bg-red-500 text-white hover:bg-red-600'
+              : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300'
+          }`}
+        >
+          {isSendingAudio
+            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+            : recorder.isRecording
+              ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5">
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                </svg>
+              : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                </svg>}
+        </button>
 
         <textarea ref={taRef} rows={1} value={text} onChange={handleChange} onKeyDown={handleKeyDown}
           onSelect={trackCursor} onClick={trackCursor} onKeyUp={trackCursor}

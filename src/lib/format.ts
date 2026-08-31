@@ -11,6 +11,8 @@ export function buildMessagePreview(
       return textContent ?? "";
     case "IMAGE":
       return "📷 Imagen";
+    case "AUDIO":
+      return "🎤 Audio";
     case "FILE":
       return "📎 Archivo adjunto";
     case "PAYLOAD":

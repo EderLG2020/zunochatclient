@@ -1,5 +1,5 @@
 import apiClient from "./api.config";
-import type { ApiResponse, BlockedUserResponse } from "@/types";
+import type { ApiResponse, BlockedUserResponse, ThemePreference, UserProfileResponse } from "@/types";
 
 export interface UserSearchResult {
   id: number;
@@ -30,5 +30,21 @@ export const userService = {
   listBlocked: async (): Promise<BlockedUserResponse[]> => {
     const res = await apiClient.get<ApiResponse<BlockedUserResponse[]>>("/api/users/blocked");
     return res.data.data;
+  },
+
+  // PATCH /api/users/me/theme
+  updateTheme: async (theme: ThemePreference): Promise<void> => {
+    await apiClient.patch<ApiResponse<null>>("/api/users/me/theme", { theme });
+  },
+
+  // GET /api/users/{id}/profile
+  getProfile: async (userId: number): Promise<UserProfileResponse> => {
+    const res = await apiClient.get<ApiResponse<UserProfileResponse>>(`/api/users/${userId}/profile`);
+    return res.data.data;
+  },
+
+  // PATCH /api/users/me/phone — phone null o "" borra el guardado
+  updatePhone: async (phone: string | null): Promise<void> => {
+    await apiClient.patch<ApiResponse<null>>("/api/users/me/phone", { phone });
   },
 };

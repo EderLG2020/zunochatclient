@@ -1,6 +1,7 @@
 import { create } from "zustand";
+import type { ThemePreference } from "@/types";
 
-type Theme = "light" | "dark";
+export type Theme = "light" | "dark";
 
 function getInitialTheme(): Theme {
   const stored = localStorage.getItem("theme");
@@ -15,6 +16,8 @@ function applyTheme(theme: Theme) {
 
 interface ThemeState {
   theme: Theme;
+  /** Aplica el tema localmente (DOM + localStorage) sin tocar el backend. */
+  setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
 }
 
@@ -23,9 +26,19 @@ applyTheme(initialTheme);
 
 export const useThemeStore = create<ThemeState>()((set, get) => ({
   theme: initialTheme,
+  setTheme: (theme) => {
+    applyTheme(theme);
+    set({ theme });
+  },
   toggleTheme: () => {
-    const next = get().theme === "dark" ? "light" : "dark";
-    applyTheme(next);
-    set({ theme: next });
+    get().setTheme(get().theme === "dark" ? "light" : "dark");
   },
 }));
+
+export function themeToPreference(theme: Theme): ThemePreference {
+  return theme === "dark" ? "DARK" : "LIGHT";
+}
+
+export function preferenceToTheme(preference: ThemePreference): Theme {
+  return preference === "DARK" ? "dark" : "light";
+}

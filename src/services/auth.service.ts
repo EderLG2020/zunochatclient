@@ -7,6 +7,9 @@ import type {
   ResendOtpRequest,
   ForgotPasswordRequest,
   ResetPasswordRequest,
+  GoogleAuthRequest,
+  GoogleAuthResponse,
+  CompleteGoogleRegistrationRequest,
   ApiResponse,
 } from "@/types";
 
@@ -52,6 +55,29 @@ export const authService = {
   // POST /api/auth/resend-otp — para cuentas PENDING_VERIFICATION que no alcanzaron a verificar
   resendOtp: async (payload: ResendOtpRequest): Promise<void> => {
     await apiClient.post<ApiResponse<null>>("/api/auth/resend-otp", payload);
+  },
+
+  // POST /api/auth/google — paso 1 del login/registro con Google (authorization
+  // code flow, ver lib/googleAuth.ts). needsUsername=true → falta completar el
+  // alta con googleAuthComplete.
+  googleAuth: async (payload: GoogleAuthRequest): Promise<GoogleAuthResponse> => {
+    const res = await apiClient.post<ApiResponse<GoogleAuthResponse>>(
+      "/api/auth/google",
+      payload,
+    );
+    return res.data.data;
+  },
+
+  // POST /api/auth/google/complete — paso 2 (solo cuentas nuevas): el usuario
+  // elige su username y se crea la cuenta.
+  completeGoogleRegistration: async (
+    payload: CompleteGoogleRegistrationRequest,
+  ): Promise<AuthResponse> => {
+    const res = await apiClient.post<ApiResponse<AuthResponse>>(
+      "/api/auth/google/complete",
+      payload,
+    );
+    return res.data.data;
   },
 
   // POST /api/auth/forgot-password — respuesta genérica exista o no la cuenta

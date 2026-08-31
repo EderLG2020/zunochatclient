@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
+import { ProfileSettings } from "@/components/settings/ProfileSettings";
 
 interface Section {
   key: string;
@@ -12,6 +13,16 @@ interface Section {
 // más secciones más adelante (notificaciones, cuenta, etc.) sin rediseñar
 // el punto de entrada ni el layout del modal.
 const SECTIONS: Section[] = [
+  {
+    key: "profile",
+    label: "Perfil",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+    content: <ProfileSettings />,
+  },
   {
     key: "appearance",
     label: "Apariencia",
@@ -44,13 +55,13 @@ export function SettingsModal({ open, onClose }: Props) {
   const active = SECTIONS.find((s) => s.key === activeKey) ?? SECTIONS[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+    <div className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Configuración"
         onClick={(e) => e.stopPropagation()}
-        className="relative flex w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-900 sm:h-[420px] sm:flex-row"
+        className="animate-scale-in relative flex w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-900 sm:h-[420px] sm:flex-row"
       >
         {/* Nav de secciones */}
         <div className="flex flex-shrink-0 flex-row gap-1 overflow-x-auto border-b border-gray-200 p-2 dark:border-gray-800 sm:w-44 sm:flex-col sm:overflow-visible sm:border-b-0 sm:border-r sm:p-3">

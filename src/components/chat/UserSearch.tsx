@@ -83,7 +83,7 @@ export function UserSearch({ onConversationReady }: Props) {
       </div>
 
       {isOpen && (
-        <div className="absolute left-3 right-3 top-full z-50 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+        <div className="animate-fade-in-up absolute left-3 right-3 top-full z-50 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
           {results.length === 0 ? (
             <p className="px-4 py-3 text-xs text-gray-400 dark:text-gray-500">Sin resultados</p>
           ) : (

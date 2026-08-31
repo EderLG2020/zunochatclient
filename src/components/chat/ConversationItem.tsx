@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { ConversationResponse } from "@/types";
 import { Avatar } from "@/components/chat/Avatar";
+import { StreakBadge } from "@/components/chat/StreakBadge";
 import { useIsOnline } from "@/hooks/usePresence";
 
 function formatTime(iso: string): string {
@@ -18,20 +19,23 @@ interface Props { conversation: ConversationResponse; isActive: boolean; onSelec
 // memo + onSelect estable (en vez de un onClick inline por ítem) para que el
 // sidebar no re-renderice todas las conversaciones cada vez que cambia una sola.
 export const ConversationItem = memo(function ConversationItem({ conversation, isActive, onSelect }: Props) {
-  const { otherUserId, otherUsername, otherAvatar, lastMessagePreview, lastMessageIsMine, lastMessageAt, unreadCount, status, muted } = conversation;
+  const { type, otherUserId, otherUsername, otherAvatar, groupName, groupAvatar, lastMessagePreview, lastMessageIsMine, lastMessageAt, unreadCount, status, muted } = conversation;
+  const isGroup = type === "GROUP";
   const preview = lastMessageIsMine ? `Tú: ${lastMessagePreview ?? ""}` : (lastMessagePreview ?? "");
+  const title = isGroup ? (groupName ?? "Grupo") : (otherUsername ?? "");
 
   // Presencia en vivo por WS si ya llegó algún evento; si no, cae al status del REST inicial.
-  const liveOnline = useIsOnline(otherUserId);
-  const isOnline = liveOnline ?? status === "ONLINE";
+  // Sin sentido para GROUP (no hay un único "otro" usuario) — nunca se muestra el punto verde ahí.
+  const liveOnline = useIsOnline(otherUserId ?? undefined);
+  const isOnline = !isGroup && (liveOnline ?? status === "ONLINE");
 
   return (
     <button onClick={() => onSelect(conversation)}
       className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-gray-50 dark:hover:bg-gray-900 ${isActive ? "bg-blue-50 border-r-2 border-blue-500 dark:bg-blue-950/40" : ""}`}>
       <div className="relative flex-shrink-0">
-        <Avatar src={otherAvatar} seed={otherUserId} label={otherUsername} size="lg" />
+        <Avatar src={isGroup ? groupAvatar : otherAvatar} seed={isGroup ? conversation.conversationId : (otherUserId ?? 0)} label={title} size="lg" />
         {isOnline && (
-          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-400 border-2 border-white dark:border-gray-950" />
+          <span className="animate-fade-in absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-400 border-2 border-white dark:border-gray-950" />
         )}
         {!isOnline && status === "TYPING" && (
           <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-yellow-400 border-2 border-white dark:border-gray-950" />
@@ -41,7 +45,8 @@ export const ConversationItem = memo(function ConversationItem({ conversation, i
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
             {muted && <span className="text-gray-400 dark:text-gray-500" title="Silenciada">🔇</span>}
-            <span className="truncate">{otherUsername}</span>
+            <span className="truncate">{title}</span>
+            {!isGroup && <StreakBadge conversationId={conversation.conversationId} />}
           </span>
           {lastMessageAt && (
             <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{formatTime(lastMessageAt)}</span>

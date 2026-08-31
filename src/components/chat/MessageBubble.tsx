@@ -59,7 +59,7 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
 
   if (message.deleted) {
     return (
-      <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} ${isGroupStart ? 'mt-3' : 'mt-0.5'} mb-0.5`}>
+      <div className={`animate-fade-in flex ${isMine ? 'justify-end' : 'justify-start'} ${isGroupStart ? 'mt-3' : 'mt-0.5'} mb-0.5`}>
         <div className="max-w-[70%] rounded-2xl px-3 py-2 italic text-xs text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 dark:text-gray-500">
           🚫 Mensaje eliminado
         </div>
@@ -68,7 +68,7 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
   }
 
   return (
-    <div className={`group flex ${isMine ? 'justify-end' : 'justify-start'} ${isGroupStart ? 'mt-3' : 'mt-0.5'} mb-0.5`}>
+    <div className={`animate-fade-in-up group flex ${isMine ? 'justify-end' : 'justify-start'} ${isGroupStart ? 'mt-3' : 'mt-0.5'} mb-0.5`}>
       {isMine && (canEdit || canDelete) && !isEditing && (
         <div className="relative mr-1 self-center opacity-0 transition group-hover:opacity-100">
           <button
@@ -81,7 +81,7 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full z-20 mt-1 w-32 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+              <div className="animate-scale-in absolute right-0 top-full z-20 mt-1 w-32 origin-top-right overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
                 {canEdit && (
                   <button
                     onClick={() => { setMenuOpen(false); setEditError(null); setIsEditing(true) }}
@@ -141,6 +141,9 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
                 ))}
               </div>
             )}
+            {message.type === 'AUDIO' && message.fileUrls?.length > 0 && (
+              <audio controls src={message.fileUrls[0]} className="h-10 max-w-full" style={{ minWidth: '220px' }} />
+            )}
             {message.type === 'IMAGE' && message.fileUrls?.length > 0 && (
               <div className={`grid gap-1 ${message.fileUrls.length > 1 ? 'grid-cols-2' : ''}`}>
                 {message.fileUrls.map((url, i) => (
@@ -161,6 +164,13 @@ export const MessageBubble = memo(function MessageBubble({ message, currentUserI
         <div className={`flex items-center gap-1 mt-1 ${isMine ? 'justify-end' : 'justify-start'}`}>
           {message.editedAt && (
             <span className={`text-[10px] italic ${isMine ? chatColor.bubbleTint : 'text-gray-400 dark:text-gray-500'}`}>editado</span>
+          )}
+          {message.expiresAt && (
+            <span title="Chat temporal — se autoelimina" className={isMine ? chatColor.bubbleTint : 'text-gray-400 dark:text-gray-500'}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-3 w-3">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </span>
           )}
           <span className={`text-[10px] ${isMine ? chatColor.bubbleTint : 'text-gray-400 dark:text-gray-500'}`}>{time}</span>
           {isMine && <StatusIcon status={message.status} />}
