@@ -1,5 +1,6 @@
 import apiClient from "./api.config";
 import type {
+  AddGroupMembersRequest,
   ApiResponse,
   ConversationResponse,
   CreateConversationRequest,
@@ -7,6 +8,8 @@ import type {
   MuteConversationRequest,
   Page,
   SetEphemeralRequest,
+  TransferGroupOwnershipRequest,
+  UpdateGroupMemberRoleRequest,
 } from "@/types";
 
 /*
@@ -68,6 +71,55 @@ export const conversationService = {
   ): Promise<ConversationResponse> => {
     const res = await apiClient.patch<ApiResponse<ConversationResponse>>(
       `/api/conversations/${conversationId}/ephemeral`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  // ── Miembros de grupo (roles: OWNER > ADMIN > MEMBER) ────────────────────
+
+  // POST /api/conversations/{id}/members — OWNER y ADMIN del grupo pueden agregar
+  addMembers: async (conversationId: number, payload: AddGroupMembersRequest): Promise<ConversationResponse> => {
+    const res = await apiClient.post<ApiResponse<ConversationResponse>>(
+      `/api/conversations/${conversationId}/members`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  // DELETE /api/conversations/{id}/members/{userId} — OWNER quita ADMIN/MEMBER, ADMIN solo MEMBER
+  removeMember: async (conversationId: number, userId: number): Promise<ConversationResponse> => {
+    const res = await apiClient.delete<ApiResponse<ConversationResponse>>(
+      `/api/conversations/${conversationId}/members/${userId}`,
+    );
+    return res.data.data;
+  },
+
+  // POST /api/conversations/{id}/leave — el OWNER debe transferir la propiedad antes
+  leaveGroup: async (conversationId: number): Promise<void> => {
+    await apiClient.post<ApiResponse<null>>(`/api/conversations/${conversationId}/leave`);
+  },
+
+  // PATCH /api/conversations/{id}/members/{userId}/role — solo el OWNER promueve/degrada
+  updateMemberRole: async (
+    conversationId: number,
+    userId: number,
+    payload: UpdateGroupMemberRoleRequest,
+  ): Promise<ConversationResponse> => {
+    const res = await apiClient.patch<ApiResponse<ConversationResponse>>(
+      `/api/conversations/${conversationId}/members/${userId}/role`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  // POST /api/conversations/{id}/transfer-ownership — solo el OWNER actual puede transferir
+  transferOwnership: async (
+    conversationId: number,
+    payload: TransferGroupOwnershipRequest,
+  ): Promise<ConversationResponse> => {
+    const res = await apiClient.post<ApiResponse<ConversationResponse>>(
+      `/api/conversations/${conversationId}/transfer-ownership`,
       payload,
     );
     return res.data.data;

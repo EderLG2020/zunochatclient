@@ -6,6 +6,7 @@ import { ConversationItem } from "@/components/chat/ConversationItem";
 import { UserSearch }       from "@/components/chat/UserSearch";
 import { CreateGroupModal } from "@/components/chat/CreateGroupModal";
 import { ContactProfilePanel } from "@/components/chat/ContactProfilePanel";
+import { GroupInfoPanel } from "@/components/chat/GroupInfoPanel";
 import { MessageBubble }    from "@/components/chat/MessageBubble";
 import { MessageInput }     from "@/components/chat/MessageInput";
 import { Avatar }           from "@/components/chat/Avatar";
@@ -431,6 +432,17 @@ function ActiveChat() {
     );
   }
 
+  if (showProfile && isGroup) {
+    return (
+      <GroupInfoPanel
+        conversation={activeConversation}
+        onBack={() => setShowProfile(false)}
+        onConversationUpdated={setActiveConversation}
+        onLeft={() => setActiveConversation(null)}
+      />
+    );
+  }
+
   if (showProfile && !isGroup) {
     return (
       <ContactProfilePanel
@@ -484,9 +496,8 @@ function ActiveChat() {
           </svg>
         </button>
         <button
-          onClick={() => { if (!isGroup) setShowProfile(true); }}
-          disabled={isGroup}
-          title={isGroup ? undefined : "Ver datos del contacto"}
+          onClick={() => setShowProfile(true)}
+          title={isGroup ? "Ver info del grupo" : "Ver datos del contacto"}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default"
         >
           <Avatar

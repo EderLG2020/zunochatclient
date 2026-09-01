@@ -59,10 +59,22 @@ export interface ResetPasswordRequest {
 // Conversations
 export type ConversationType = "DIRECT" | "GROUP";
 
+export type GroupRole = "OWNER" | "ADMIN" | "MEMBER";
+
 export interface GroupMemberResponse {
   userId: number;
   username: string;
   avatar: string | null;
+  role: GroupRole;
+}
+export interface AddGroupMembersRequest {
+  memberIds: number[];
+}
+export interface UpdateGroupMemberRoleRequest {
+  role: GroupRole;
+}
+export interface TransferGroupOwnershipRequest {
+  newOwnerUserId: number;
 }
 
 export interface ConversationResponse {
@@ -113,6 +125,23 @@ export interface UserProfileResponse {
 }
 export interface UpdatePhoneRequest {
   phone: string | null;
+}
+export interface UpdateUsernameRequest {
+  username: string;
+}
+export interface UpdateAvatarRequest {
+  avatarUrl: string | null;
+}
+export interface UpdatePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+export interface RequestEmailChangeRequest {
+  currentPassword: string;
+  newEmail: string;
+}
+export interface ConfirmEmailChangeRequest {
+  otpCode: string;
 }
 
 // Messages
@@ -287,4 +316,18 @@ export interface AssignRoleRequest {
 }
 export interface ModerateUserRequest {
   reason?: string;
+}
+
+// Historial de moderación (audit log)
+export type AdminAuditAction = "BAN" | "ACTIVATE" | "DELETE" | "ROLE_CHANGE";
+
+export interface AdminAuditLogResponse {
+  id: number;
+  actorId: number;
+  actorUsername: string;
+  targetId: number;
+  targetUsername: string;
+  action: AdminAuditAction;
+  details: string | null;
+  createdAt: string;
 }

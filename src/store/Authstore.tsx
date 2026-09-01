@@ -22,6 +22,8 @@ interface AuthState {
   logout: () => void
   hydrate: () => void
   refreshIfNeeded: () => Promise<void>
+  applyAuthUpdate: (auth: AuthResponse) => void
+  updateEmail: (email: string) => void
 }
 
 /** Si al JWT le queda menos de esto, se renueva sola sin esperar a que expire. */
@@ -87,6 +89,24 @@ export const useAuthStore = create<AuthState>()(
           // Token fuera de la ventana de gracia o cuenta ya no válida — se
           // deja que el próximo 401 real dispare el logout normal.
         }
+      },
+
+      // Aplica un AuthResponse tras un cambio de perfil que devuelve token
+      // nuevo (ver userService.updateUsername) — a diferencia de login(), no
+      // reconecta el WS ni reaplica la preferencia de tema: la sesión sigue
+      // siendo la misma, solo cambió un dato del usuario.
+      applyAuthUpdate: (auth: AuthResponse) => {
+        set({
+          token: auth.token,
+          user: { username: auth.username, email: auth.email, role: auth.role, permissions: auth.permissions },
+        })
+      },
+
+      // Cambio de email confirmado (ver userService.confirmEmailChange) — a
+      // diferencia del username, el email no viaja en el JWT, así que no hace
+      // falta token nuevo, solo reflejar el dato en el store.
+      updateEmail: (email: string) => {
+        set((state) => ({ user: state.user ? { ...state.user, email } : state.user }))
       },
     }),
     {

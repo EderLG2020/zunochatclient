@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/authstore";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
-import type { AdminUserResponse, Role, UserStatus } from "@/types";
+import type { AdminAuditAction, AdminAuditLogResponse, AdminUserResponse, Role, UserStatus } from "@/types";
 
 const STATUS_LABEL: Record<UserStatus, string> = {
   PENDING_VERIFICATION: "Pendiente",
@@ -21,12 +21,25 @@ const STATUS_COLOR: Record<UserStatus, string> = {
   INACTIVE: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
   DELETED: "bg-gray-200 text-gray-500 dark:bg-gray-900 dark:text-gray-500",
 };
+const ACTION_LABEL: Record<AdminAuditAction, string> = {
+  BAN: "Baneo",
+  ACTIVATE: "Activación",
+  DELETE: "Eliminación",
+  ROLE_CHANGE: "Cambio de rol",
+};
+const ACTION_COLOR: Record<AdminAuditAction, string> = {
+  BAN: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+  ACTIVATE: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
+  DELETE: "bg-gray-200 text-gray-600 dark:bg-gray-900 dark:text-gray-400",
+  ROLE_CHANGE: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
+};
 
 export function AdminPage() {
   const currentUser = useAuthStore((s) => s.user);
   const isSuperadmin = currentUser?.role === "SUPERADMIN";
   const isAuthorized = currentUser?.role === "ADMIN" || isSuperadmin;
 
+  const [view, setView] = useState<"users" | "audit">("users");
   const [users, setUsers] = useState<AdminUserResponse[]>([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -65,6 +78,32 @@ export function AdminPage() {
   useEffect(() => { loadRef.current = load; }, [load]);
   useEffect(() => { void loadRef.current(); }, [page, search, statusFilter, roleFilter]);
 
+  // ── Auditoría ─────────────────────────────────────────────────────────
+  const [auditLogs, setAuditLogs] = useState<AdminAuditLogResponse[]>([]);
+  const [auditPage, setAuditPage] = useState(0);
+  const [auditTotalPages, setAuditTotalPages] = useState(0);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  const loadAudit = useCallback(async () => {
+    try {
+      setIsAuditLoading(true);
+      setAuditError(null);
+      const result = await adminService.auditLog({ page: auditPage, size: 20 });
+      setAuditLogs(result.content);
+      setAuditTotalPages(result.totalPages);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      setAuditError(e.response?.data?.message ?? "No se pudo cargar el historial de auditoría.");
+    } finally {
+      setIsAuditLoading(false);
+    }
+  }, [auditPage]);
+
+  const loadAuditRef = useRef(loadAudit);
+  useEffect(() => { loadAuditRef.current = loadAudit; }, [loadAudit]);
+  useEffect(() => { if (view === "audit") void loadAuditRef.current(); }, [view, auditPage]);
+
   if (!isAuthorized) return <Navigate to="/chat" replace />;
 
   const withAction = async (userId: number, action: () => Promise<void>) => {
@@ -92,6 +131,24 @@ export function AdminPage() {
         </Link>
       </div>
 
+      <div className="flex gap-1 border-b border-gray-200 bg-white px-6 pt-2 dark:border-gray-800 dark:bg-gray-900">
+        {([["users", "Usuarios"], ["audit", "Auditoría"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={`rounded-t-lg px-3 py-2 text-sm font-medium transition ${
+              view === key
+                ? "border-b-2 border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
+                : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "users" && (
+      <>
       <div className="flex flex-wrap items-end gap-3 border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-800 dark:bg-gray-900">
         <div className="w-56">
           <Input
@@ -236,6 +293,59 @@ export function AdminPage() {
           <span className="text-xs text-gray-500 dark:text-gray-400">Página {page + 1} de {totalPages}</span>
           <Button variant="ghost" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Siguiente</Button>
         </div>
+      )}
+      </>
+      )}
+
+      {view === "audit" && (
+        <>
+          {auditError && (
+            <p className="mx-6 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">{auditError}</p>
+          )}
+
+          <div className="flex-1 overflow-auto px-6 py-4">
+            {isAuditLoading ? (
+              <div className="flex justify-center py-16"><Spinner /></div>
+            ) : auditLogs.length === 0 ? (
+              <p className="py-16 text-center text-sm text-gray-400">Sin acciones de moderación registradas.</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-xs uppercase text-gray-400 dark:border-gray-800">
+                    <th className="py-2 pr-4">Fecha</th>
+                    <th className="py-2 pr-4">Acción</th>
+                    <th className="py-2 pr-4">Realizada por</th>
+                    <th className="py-2 pr-4">Sobre</th>
+                    <th className="py-2 pr-4">Detalle</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLogs.map((a) => (
+                    <tr key={a.id} className="border-b border-gray-100 dark:border-gray-900">
+                      <td className="py-2.5 pr-4 text-xs text-gray-400">{new Date(a.createdAt).toLocaleString("es")}</td>
+                      <td className="py-2.5 pr-4">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ACTION_COLOR[a.action]}`}>
+                          {ACTION_LABEL[a.action]}
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-4 font-medium text-gray-900 dark:text-gray-100">{a.actorUsername}</td>
+                      <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{a.targetUsername}</td>
+                      <td className="py-2.5 pr-4 text-gray-500 dark:text-gray-400">{a.details ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {auditTotalPages > 1 && (
+            <div className="flex items-center justify-center gap-4 border-t border-gray-200 bg-white px-6 py-3 dark:border-gray-800 dark:bg-gray-900">
+              <Button variant="ghost" disabled={auditPage === 0} onClick={() => setAuditPage((p) => p - 1)}>Anterior</Button>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Página {auditPage + 1} de {auditTotalPages}</span>
+              <Button variant="ghost" disabled={auditPage >= auditTotalPages - 1} onClick={() => setAuditPage((p) => p + 1)}>Siguiente</Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
