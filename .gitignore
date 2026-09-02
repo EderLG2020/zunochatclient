@@ -23,7 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 zunochat-client.zip
-.env.example
+.env
+.env.local
 
 # Assets generados por `npm run asset:generate` (ver ASSETS_OUTPUT_DIR en .env.example)
 assets/generated/*

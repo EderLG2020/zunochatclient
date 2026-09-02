@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA: cualquier ruta que no sea un archivo estático cae en index.html,
+# para que react-router-dom maneje el path en el cliente (evita 404 al
+# refrescar en /chat, /login, etc.)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
